@@ -1,0 +1,13 @@
+﻿股票代码,股票名称,买入信号,评分,图表路径
+300109,新开源,RSI值为33.94，处于低位回升阶段; KDJ低位金叉,30,results/300109_新开源_analysis.png
+300112,万讯自控,MACD金叉形成; KDJ金叉,30,results/300112_万讯自控_analysis.png
+300123,亚光科技,RSI值为49.61，处于低位回升阶段; MACD金叉形成,35,results/300123_亚光科技_analysis.png
+300132,青松股份,"MA金叉形成; MACD金叉形成; KDJ金叉; 放量上涨: 量比1.68, 涨幅3.87%",65,results/300132_青松股份_analysis.png
+300135,宝利国际,RSI值为49.57，处于低位回升阶段; KDJ低位金叉,30,results/300135_宝利国际_analysis.png
+300142,沃森生物,RSI值为44.51，处于低位回升阶段; MACD金叉形成; KDJ低位金叉,50,results/300142_沃森生物_analysis.png
+300145,南方泵业,RSI值为33.85，处于低位回升阶段; KDJ低位金叉,30,results/300145_南方泵业_analysis.png
+300148,天舟文化,RSI值为45.36，处于低位回升阶段; KDJ低位金叉,30,results/300148_天舟文化_analysis.png
+300154,瑞凌股份,RSI值为49.56，处于低位回升阶段; MACD金叉形成,35,results/300154_瑞凌股份_analysis.png
+300157,新锦动力,"MACD金叉形成; 放量上涨: 量比3.19, 涨幅6.48%",35,results/300157_新锦动力_analysis.png
+300158,振东制药,MA金叉形成; RSI值为46.36，处于低位回升阶段,35,results/300158_振东制药_analysis.png
+300160,秀强股份,MA金叉形成; KDJ金叉,30,results/300160_秀强股份_analysis.png
