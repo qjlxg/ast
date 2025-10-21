@@ -1,0 +1,19 @@
+# 使用Ubuntu基础镜像
+FROM ubuntu:22.04
+
+# 设置APT代理 - 使用宿主机IP而非localhost
+ENV http_proxy="http://host.docker.internal:7890"
+ENV https_proxy="http://host.docker.internal:7890"
+ENV HTTP_PROXY="http://192.168.47.132:7890"
+ENV HTTPS_PROXY="http://192.168.47.132:7890"
+ENV no_proxy="192.168.47.132"
+ENV NO_PROXY="192.168.47.132"
+
+# 设置工作目录
+WORKDIR /app
+
+# 运行命令保持容器运行
+CMD ["bash"] 
+
+
+

@@ -1,0 +1,95 @@
+name: 数据更新
+
+# 定义触发工作流的事件
+on:
+  # 1. 自动触发（仅在核心代码或配置更改时）
+  push:
+    paths:
+      - 'stock_analysis_workflow.yml'
+      - 'stock_analysis_all.py'
+      - 'progress.txt' # 监控进度文件变化
+      
+  # 2. 手动触发 (用于首次运行或调试)
+  workflow_dispatch:
+  
+  # 3. 定时运行：每天 UTC 02:00 运行（上海时间 上午 10:00）
+  schedule:
+    # 每天只运行一次，如果上次没跑完，则本次会继续上一次的进度
+    - cron: '0 2 * * *'
+
+# 定义工作流中的任务
+jobs:
+  analyze_stocks:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. 检出代码 (必须获取完整历史记录和所有文件)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      # 2. 设置 Python 环境
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      # 3. 安装依赖和中文字体
+      - name: Install dependencies and fonts
+        run: |
+          python -m pip install --upgrade pip
+          # 安装 GitHub CLI (gh) 和中文字体
+          sudo apt-get update
+          sudo apt-get install -y gh fonts-wqy-zenhei
+          pip install akshare pandas numpy matplotlib tqdm
+          
+      # 4. 运行股票分析脚本并捕获退出码
+      - name: Run stock analysis script (Batch Processing)
+        id: run_script
+        # 允许非零退出码（如 99）不立即失败工作流，以便进行后续处理
+        run: |
+          set +e 
+          echo "Starting stock analysis script..."
+          python stock_analysis_all.py
+          EXIT_CODE=$?
+          echo "Script finished with exit code: $EXIT_CODE"
+          
+          # 将退出码设置为输出，供第6步判断
+          echo "status=$EXIT_CODE" >> $GITHUB_OUTPUT
+        
+      # 5. 将更新的文件提交并推送回仓库
+      - name: Commit and push progress and data
+        run: |
+          # 配置 Git 身份
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          # 暂存数据目录、结果目录和进度文件
+          git add stock_data results progress.txt
+          
+          # 检查是否有文件需要提交
+          if git diff --staged --quiet; then
+            echo "No file changes to commit."
+          else
+            # 提交更改
+            git commit -m "Automated analysis: Save batch progress and data for $(date +%Y-%m-%d) (Exit Code: ${{ steps.run_script.outputs.status }})"
+            
+            # 推送到当前分支
+            git push
+            echo "Data batch committed and pushed."
+          fi
+          
+      # 6. 检查退出码，如果为 99，则使用 GH CLI 重启工作流
+      - name: Check Status and Self-Restart Workflow
+        if: steps.run_script.outputs.status == '99'
+        run: |
+          echo "Exit Code 99 detected: Restarting workflow for next batch..."
+          
+          # 【关键修复】明确指定工作流文件名，确保正确触发
+          gh workflow run stock_analysis_workflow.yml --ref ${{ github.ref }}
+          
+          echo "Workflow dispatched successfully. Next batch will start shortly."
+        env:
+          # 必须将 GITHUB_TOKEN 传给 gh 命令
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

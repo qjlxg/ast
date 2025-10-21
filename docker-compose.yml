@@ -1,0 +1,20 @@
+version: '3.3'
+
+services:
+  ai-hedge-fund:
+    build:
+      context: .
+      dockerfile: src/dockerfile
+    volumes:
+      - ./.env:/app/.env
+    ports:
+      - "8000:8000"  # 如果有Web服务需要暴露端口
+    tty: true  # 保持终端
+    stdin_open: true  # 保持标准输入开启
+    command: --tickers "AAPL,MSFT,GOOGL" --show-reasoning  # 默认命令参数，可根据需要修改
+    network_mode: "host"  # 使用主机网络
+    environment:
+      - http_proxy=
+      - https_proxy=
+      - HTTP_PROXY=
+      - HTTPS_PROXY= 

@@ -1,0 +1,22 @@
+[2025-10-21 00:42:00.511529] --- Starting Log for Run: 20251021_004200 ---
+[2025-10-21 00:42:14.479249] Error processing 002303.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479261] Error processing 002295.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479266] Error processing 002249.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479270] Error processing 001301.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479291] Error processing 002390.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479295] Error processing 002145.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479299] Error processing 000813.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479303] Error processing 000885.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479306] Error processing 001287.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479310] Error processing 000978.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479314] Error processing 000020.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479318] Error processing 001326.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479321] Error processing 002330.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479325] Error processing 002083.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479328] Error processing 002004.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479332] Error processing 002184.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479335] Error processing 000592.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479339] Error processing 000957.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479343] Error processing 002183.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479346] Error processing 002245.SZ in screening logic: x and y must be the same size
+[2025-10-21 00:42:14.479350] Error processing 000727.SZ in screening logic: x and y must be the same size
