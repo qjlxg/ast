@@ -1,13 +1,17 @@
 name: 股票分析工作流 (Stock Analysis Workflow)
 
 on:
-  # 触发器：监听对指定文件的 push 操作
+  # 触发器 1: 监听对指定文件的 push 操作
   push:
     paths:
       - 'stock_workflow.yml'
       - 'stock_analysis_v2.py'
   
-  # 示例：每天 UTC 时间 10:00 运行，相当于 CST/GMT+8 (上海) 时间 18:00。
+  # 触发器 2: 允许手动触发 (在 GitHub Actions 页面可见)
+  workflow_dispatch:
+    # 保持为空即可，允许不带任何参数的手动运行
+
+  # 示例：定时任务
   # schedule:
   #   - cron: '0 10 * * *' 
 
@@ -41,7 +45,7 @@ jobs:
         echo "工作流当前运行的时区和时间: $TZ $(date)"
         python stock_analysis_v2.py
         
-    # --- 新增步骤：提交并推送结果到仓库 ---
+    # --- 提交并推送结果到仓库 ---
     - name: 提交并推送结果 (Commit and Push Results)
       # 仅在脚本成功运行后执行
       if: success()
@@ -62,7 +66,6 @@ jobs:
           git commit -m "🤖 Auto: Add/Update stock buy signals for ${TIMESTAMP}"
           
           # 5. 推送到仓库（使用默认的 GITHUB_TOKEN 权限）
-          # 使用 --allow-empty-push 以确保即使没有内容变化也能完成推送，不过我们已经有diff检查了。
           git push
           echo "✅ 已将最新的分析结果推送回仓库。"
         fi
