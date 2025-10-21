@@ -1,0 +1,8 @@
+﻿股票代码,股票名称,买入信号,评分,图表路径
+003037,三和管桩,RSI值为27.65，股票可能超卖; MACD金叉形成,30,results/003037_三和管桩_analysis.png
+003039,顺控发展,MA金叉形成; KDJ金叉,30,results/003039_顺控发展_analysis.png
+300004,南风股份,RSI值为40.00，处于低位回升阶段; KDJ低位金叉,30,results/300004_南风股份_analysis.png
+300025,华星创业,RSI值为40.94，处于低位回升阶段; MACD金叉形成,35,results/300025_华星创业_analysis.png
+300027,华谊兄弟,RSI值为38.18，处于低位回升阶段; KDJ低位金叉,30,results/300027_华谊兄弟_analysis.png
+300032,金龙机电,RSI值为32.03，处于低位回升阶段; KDJ低位金叉,30,results/300032_金龙机电_analysis.png
+300042,朗科科技,MACD金叉形成; KDJ低位金叉,35,results/300042_朗科科技_analysis.png
