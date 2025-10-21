@@ -1,50 +1,68 @@
 name: 股票分析工作流 (Stock Analysis Workflow)
 
 on:
-
-触发器：监听对指定文件的 push 操作
-
-push:
-paths:
-- 'stock_workflow.yml'
-- 'stock_analysis_v2.py'
-
-如果您希望在特定时间（例如，每个交易日收盘后）运行，可以添加定时任务。
-
-示例：每天 UTC 时间 10:00 运行，相当于 CST/GMT+8 (上海) 时间 18:00。
-
-schedule:
-
-- cron: '0 10 * * 1-5' # 星期一到星期五的 18:00 (上海时间)
+  # 触发器：监听对指定文件的 push 操作
+  push:
+    paths:
+      - 'stock_workflow.yml'
+      - 'stock_analysis_v2.py'
+  
+  # 示例：每天 UTC 时间 10:00 运行，相当于 CST/GMT+8 (上海) 时间 18:00。
+  # schedule:
+  #   - cron: '0 10 * * *' 
 
 jobs:
-run_analysis:
-# 设置运行环境为最新的 Ubuntu
-runs-on: ubuntu-latest
+  run_analysis:
+    # 设置运行环境为最新的 Ubuntu
+    runs-on: ubuntu-latest
+    
+    # 关键设置：将整个 Job 的时区设置为上海时间
+    env:
+      TZ: Asia/Shanghai
 
-# 关键设置：将整个 Job 的时区设置为上海时间
-env:
-  TZ: Asia/Shanghai
+    steps:
+    - name: 检出代码 (Checkout Repository)
+      uses: actions/checkout@v4
+      # 注意：actions/checkout@v4 默认使用 GITHUB_TOKEN，该 token 具有推送权限。
 
-steps:
-- name: 检出代码 (Checkout Repository)
-  uses: actions/checkout@v4
+    - name: 设置 Python 环境 (Set up Python)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10' # 确保使用兼容的 Python 版本
 
-- name: 设置 Python 环境 (Set up Python)
-  uses: actions/setup-python@v5
-  with:
-    python-version: '3.10' # 请根据您的脚本需求调整 Python 版本
+    - name: 安装依赖 (Install dependencies)
+      run: |
+        pip install --upgrade pip
+        pip install pandas  # 确保安装了 pandas
+        echo "依赖安装步骤完成。"
 
-- name: 安装依赖 (Install dependencies)
-  # 假设您有一个 requirements.txt 文件
-  run: |
-    pip install --upgrade pip
-    # 如果有依赖文件，请取消注释下一行
-    # pip install -r requirements.txt 
-    echo "依赖安装步骤完成。"
-
-- name: 运行股票分析脚本 (Run Stock Analysis Script)
-  # 运行时的当前时间将是上海时间
-  run: |
-    echo "工作流当前运行的时区和时间: $TZ $(date)"
-    python stock_analysis_v2.py
+    - name: 运行股票分析脚本 (Run Stock Analysis Script)
+      run: |
+        echo "工作流当前运行的时区和时间: $TZ $(date)"
+        python stock_analysis_v2.py
+        
+    # --- 新增步骤：提交并推送结果到仓库 ---
+    - name: 提交并推送结果 (Commit and Push Results)
+      # 仅在脚本成功运行后执行
+      if: success()
+      run: |
+        # 1. 配置 Git 用户信息（使用 GitHub Actions bot 身份）
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # 2. 添加 buy_signals 目录下的所有文件 (此目录包含生成的CSV)
+        git add buy_signals
+        
+        # 3. 检查是否有文件更改或新增 (防止空提交)
+        if git diff --cached --exit-code; then
+          echo "✅ 目录 'buy_signals' 中没有新的分析结果，跳过 Git 提交。"
+        else
+          # 4. 提交更改
+          TIMESTAMP=$(date +%Y%m%d%H%M)
+          git commit -m "🤖 Auto: Add/Update stock buy signals for ${TIMESTAMP}"
+          
+          # 5. 推送到仓库（使用默认的 GITHUB_TOKEN 权限）
+          # 使用 --allow-empty-push 以确保即使没有内容变化也能完成推送，不过我们已经有diff检查了。
+          git push
+          echo "✅ 已将最新的分析结果推送回仓库。"
+        fi
