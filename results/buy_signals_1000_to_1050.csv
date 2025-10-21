@@ -1,0 +1,7 @@
+﻿股票代码,股票名称,买入信号,评分,图表路径
+002572,索菲亚,RSI值为45.13，处于低位回升阶段; MACD金叉形成,35,results/002572_索菲亚_analysis.png
+002582,好想你,"MACD金叉形成; 放量上涨: 量比1.56, 涨幅3.80%",35,results/002582_好想你_analysis.png
+002587,奥拓电子,RSI值为49.54，处于低位回升阶段; MACD金叉形成; KDJ低位金叉,50,results/002587_奥拓电子_analysis.png
+002595,豪迈科技,RSI值为45.67，处于低位回升阶段; KDJ低位金叉,30,results/002595_豪迈科技_analysis.png
+002613,北玻股份,MACD金叉形成; KDJ金叉,30,results/002613_北玻股份_analysis.png
+002615,哈尔斯,RSI值为49.54，处于低位回升阶段; MACD金叉形成,35,results/002615_哈尔斯_analysis.png
