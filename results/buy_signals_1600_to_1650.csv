@@ -1,0 +1,13 @@
+﻿股票代码,股票名称,买入信号,评分,图表路径
+300231,银信科技,RSI值为40.00，处于低位回升阶段; KDJ低位金叉,30,results/300231_银信科技_analysis.png
+300232,洲明科技,"RSI值为45.42，处于低位回升阶段; KDJ低位金叉; 放量上涨: 量比2.09, 涨幅7.97%",45,results/300232_洲明科技_analysis.png
+300234,开尔新材,MACD金叉形成; KDJ金叉,30,results/300234_开尔新材_analysis.png
+300245,天玑科技,RSI值为38.08，处于低位回升阶段; MACD金叉形成; KDJ低位金叉,50,results/300245_天玑科技_analysis.png
+300249,依米康,RSI值为32.74，处于低位回升阶段; KDJ低位金叉,30,results/300249_依米康_analysis.png
+300256,星星科技,RSI值为38.46，处于低位回升阶段; KDJ低位金叉,30,results/300256_星星科技_analysis.png
+300264,佳创视讯,RSI值为39.76，处于低位回升阶段; KDJ低位金叉,30,results/300264_佳创视讯_analysis.png
+300272,开能健康,MACD金叉形成; KDJ金叉,30,results/300272_开能健康_analysis.png
+300275,梅安森,RSI值为43.93，处于低位回升阶段; KDJ低位金叉,30,results/300275_梅安森_analysis.png
+300278,华昌达,RSI值为42.57，处于低位回升阶段; KDJ低位金叉,30,results/300278_华昌达_analysis.png
+300279,和晶科技,RSI值为40.10，处于低位回升阶段; KDJ低位金叉,30,results/300279_和晶科技_analysis.png
+300281,金明精机,RSI值为47.86，处于低位回升阶段; KDJ低位金叉,30,results/300281_金明精机_analysis.png
