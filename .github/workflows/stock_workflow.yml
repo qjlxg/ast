@@ -1,0 +1,50 @@
+name: 股票分析工作流 (Stock Analysis Workflow)
+
+on:
+
+触发器：监听对指定文件的 push 操作
+
+push:
+paths:
+- 'stock_workflow.yml'
+- 'stock_analysis_v2.py'
+
+如果您希望在特定时间（例如，每个交易日收盘后）运行，可以添加定时任务。
+
+示例：每天 UTC 时间 10:00 运行，相当于 CST/GMT+8 (上海) 时间 18:00。
+
+schedule:
+
+- cron: '0 10 * * 1-5' # 星期一到星期五的 18:00 (上海时间)
+
+jobs:
+run_analysis:
+# 设置运行环境为最新的 Ubuntu
+runs-on: ubuntu-latest
+
+# 关键设置：将整个 Job 的时区设置为上海时间
+env:
+  TZ: Asia/Shanghai
+
+steps:
+- name: 检出代码 (Checkout Repository)
+  uses: actions/checkout@v4
+
+- name: 设置 Python 环境 (Set up Python)
+  uses: actions/setup-python@v5
+  with:
+    python-version: '3.10' # 请根据您的脚本需求调整 Python 版本
+
+- name: 安装依赖 (Install dependencies)
+  # 假设您有一个 requirements.txt 文件
+  run: |
+    pip install --upgrade pip
+    # 如果有依赖文件，请取消注释下一行
+    # pip install -r requirements.txt 
+    echo "依赖安装步骤完成。"
+
+- name: 运行股票分析脚本 (Run Stock Analysis Script)
+  # 运行时的当前时间将是上海时间
+  run: |
+    echo "工作流当前运行的时区和时间: $TZ $(date)"
+    python stock_analysis_v2.py
