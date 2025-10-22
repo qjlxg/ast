@@ -15,20 +15,26 @@ on:
       
   # 3. 每日定时运行 (对应 UTC 09:00，即上海时间 17:00 CST)
   schedule:
-    - cron: '0 9 * * *' 
+    - cron: '0 9 * * *'  # UTC 09:00
 
 jobs:
   run_screener:
     runs-on: ubuntu-latest
     
-    # 设置一个环境变量来模拟今天的日期 (例如 '20251022')
-    # 在生产环境中，建议移除此环境变量，让 Python 脚本使用 datetime.now() 来获取实时日期
-    env:
-      TODAY_DATE: 20251022 
+    # 【修改 1/3】移除硬编码的 TODAY_DATE 环境变量
+    # env:
+    #   TODAY_DATE: 20251022 
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        
+      # 【新增步骤】获取并设置当前日期为环境变量，格式为 YYYYMMDD
+      # 注意：在 Linux 环境中，date 命令默认使用工作流运行时的 UTC 时间。
+      # 如果需要精确的上海时间，可能需要更复杂的时区转换，但对于每日定时任务，使用脚本内 datetime.now() 通常更可靠。
+      - name: Set Today's Date Variable
+        id: date
+        run: echo "TODAY_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
         
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,16 +48,14 @@ jobs:
           pip install pandas numpy
 
       - name: Run Stock Screener Script
-        # 执行 Python 脚本，传入日期参数。
-        # 脚本将查找 buy_signals/${TODAY_DATE}/${TODAY_DATE}.csv 和 stock_data/*.csv 文件。
-        # 如果 buy_signals 文件不存在，脚本将终止运行。
-        run: python screener.py ${{ env.TODAY_DATE }}
+        # 【修改 2/3】不再向 Python 脚本传入日期参数，让脚本自动获取日期
+        run: python screener.py 
 
       - name: Commit and Push results
-        # 将生成的筛选结果文件提交回仓库
+        # 【修改 3/3】使用新设置的 GITHUB_ENV 变量 TODAY_DATE
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          # 只提交生成的筛选结果文件
+          # 提交当天生成的筛选结果文件
           file_pattern: screened_signals/${{ env.TODAY_DATE }}/*.csv
           commit_message: "🤖 Daily Stock Screening Results for ${{ env.TODAY_DATE }}"
           skip_dirty_check: true
