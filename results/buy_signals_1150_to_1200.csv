@@ -1,9 +1,6 @@
 ﻿股票代码,股票名称,买入信号,评分,图表路径
-002755,奥赛康,RSI值为42.15，处于低位回升阶段; MACD金叉形成,35,results/002755_奥赛康_analysis.png
-002761,浙江建投,MACD金叉形成; KDJ金叉,30,results/002761_浙江建投_analysis.png
-002767,先锋电子,"放量上涨: 量比3.83, 涨幅10.02%; 突破20日前高",30,results/002767_先锋电子_analysis.png
-002771,真视通,RSI值为40.14，处于低位回升阶段; KDJ低位金叉,30,results/002771_真视通_analysis.png
-002774,快意电梯,RSI值为45.49，处于低位回升阶段; MACD金叉形成,35,results/002774_快意电梯_analysis.png
-002783,凯龙股份,"MACD金叉形成; KDJ金叉; 放量上涨: 量比1.65, 涨幅3.55%",45,results/002783_凯龙股份_analysis.png
-002791,坚朗五金,MA金叉形成; RSI值为50.00，处于低位回升阶段; MACD金叉形成,55,results/002791_坚朗五金_analysis.png
-002801,微光股份,RSI值为32.20，处于低位回升阶段; KDJ低位金叉,30,results/002801_微光股份_analysis.png
+002746,仙坛股份,MA金叉形成; KDJ金叉,30,results/002746_仙坛股份_analysis.png
+002757,南兴股份,RSI值为39.14，处于低位回升阶段; KDJ低位金叉,30,results/002757_南兴股份_analysis.png
+002771,真视通,RSI值为39.49，处于低位回升阶段; MACD金叉形成,35,results/002771_真视通_analysis.png
+002786,银宝山新,RSI值为43.07，处于低位回升阶段; MACD金叉形成,35,results/002786_银宝山新_analysis.png
+002795,永和智控,"放量上涨: 量比1.73, 涨幅3.22%; 突破20日前高",30,results/002795_永和智控_analysis.png
