@@ -1,7 +1,5 @@
 ﻿股票代码,股票名称,买入信号,评分,图表路径
-002399,海普瑞,RSI值为43.75，处于低位回升阶段; MACD金叉形成,35,results/002399_海普瑞_analysis.png
-002406,远东传动,RSI值为38.06，处于低位回升阶段; KDJ低位金叉,30,results/002406_远东传动_analysis.png
-002421,达实智能,RSI值为32.35，处于低位回升阶段; KDJ低位金叉,30,results/002421_达实智能_analysis.png
-002426,胜利精密,RSI值为41.32，处于低位回升阶段; KDJ低位金叉,30,results/002426_胜利精密_analysis.png
-002436,兴森科技,RSI值为31.09，处于低位回升阶段; KDJ低位金叉,30,results/002436_兴森科技_analysis.png
-002441,众业达,MA金叉形成; MACD金叉形成; KDJ金叉,50,results/002441_众业达_analysis.png
+002400,省广集团,RSI值为45.34，处于低位回升阶段; KDJ低位金叉,30,results/002400_省广集团_analysis.png
+002422,科伦药业,RSI值为36.69，处于低位回升阶段; MACD金叉形成,35,results/002422_科伦药业_analysis.png
+002442,龙星科技,MACD金叉形成; KDJ低位金叉,35,results/002442_龙星科技_analysis.png
+002449,国星光电,RSI值为34.81，处于低位回升阶段; KDJ低位金叉,30,results/002449_国星光电_analysis.png
