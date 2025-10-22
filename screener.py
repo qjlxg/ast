@@ -57,11 +57,13 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
             try:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             except Exception:
-                print(f"Warning: Stock {stock_code} column '{col}' cannot be converted to numeric. Skipping.")
+                # 中文提示
+                print(f"警告: 股票 {stock_code} 的 '{col}' 列无法转换为数字。跳过。")
                 return pd.DataFrame()
                 
             if col not in df.columns or df[col].isnull().all():
-                print(f"Warning: Stock {stock_code} file missing required column: {col} or data is invalid. Skipping.")
+                # 中文提示
+                print(f"警告: 股票 {stock_code} 文件缺少必需的列: {col} 或数据无效。跳过。")
                 return pd.DataFrame()
         
         # Add stock information
@@ -72,10 +74,12 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
         return df.drop(df[df.index.dayofweek > 4].index)
 
     except FileNotFoundError:
-        print(f"Error: Historical data file {file_path} for stock {stock_code} not found. Skipping.")
+        # 中文提示
+        print(f"错误: 找不到股票 {stock_code} 的历史数据文件 {file_path}。跳过。")
         return pd.DataFrame()
     except Exception as e:
-        print(f"Error: Exception occurred while reading and processing data for stock {stock_code}: {e}")
+        # 中文提示
+        print(f"错误: 读取和处理股票 {stock_code} 数据时发生异常: {e}")
         return pd.DataFrame()
 
 
@@ -175,7 +179,8 @@ def main(date_str=None):
         try:
             today = datetime.strptime(date_str, '%Y%m%d')
         except ValueError:
-            print(f"Error: Invalid date format provided: {date_str}. Expected YYYYMMDD.")
+            # 中文提示
+            print(f"错误: 提供的日期格式无效: {date_str}。预期格式为 YYYYMMDD。")
             sys.exit(1)
 
     input_file_path = f'buy_signals/{date_str}/{date_str}.csv'
@@ -185,20 +190,22 @@ def main(date_str=None):
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"--- 启动股票筛选器，日期: {date_str} ---") # 中文修改
-    print(f"输入文件路径: {input_file_path}")        # 中文修改
-    print(f"历史数据目录: {STOCK_DATA_DIR}")        # 中文修改
+    # 中文控制台输出
+    print(f"--- 启动股票筛选器，日期: {date_str} ---")
+    print(f"输入文件路径: {input_file_path}")
+    print(f"历史数据目录: {STOCK_DATA_DIR}")
 
     # 2. Read Input CSV File
     try:
         # Load the list of stocks to screen
         input_df = pd.read_csv(input_file_path, dtype={'StockCode': str})
     except FileNotFoundError:
-        # As per user request, terminate if the input file is not found
-        print(f"错误: 找不到输入文件 {input_file_path}。该文件必须存在且每日更新。") # 中文修改
+        # 中文错误提示
+        print(f"错误: 找不到输入文件 {input_file_path}。该文件必须存在且每日更新。")
         sys.exit(1)
     except Exception as e:
-        print(f"错误: 读取输入文件 {input_file_path} 时发生未知错误: {e}") # 中文修改
+        # 中文错误提示
+        print(f"错误: 读取输入文件 {input_file_path} 时发生未知错误: {e}")
         sys.exit(1)
         
     results = []
@@ -209,7 +216,8 @@ def main(date_str=None):
         name = row.get('StockName', row.get('股票名称', code))
         
         if not code:
-            print(f"警告: 缺少股票代码，跳过行 {index}。") # 中文修改
+            # 中文警告提示
+            print(f"警告: 缺少股票代码，跳过行 {index}。")
             continue
 
         # Load historical data from local file
@@ -225,38 +233,42 @@ def main(date_str=None):
         score, signals = get_uptrend_signals(analyzed_data)
         
         # 将英文信号名转换为中文并连接
-        chinese_signals = [SIGNAL_CN_MAP.get(sig, sig) for sig in signals.keys()] # **新增：中文转换**
+        chinese_signals = [SIGNAL_CN_MAP.get(sig, sig) for sig in signals.keys()] 
         
-        # Record results
+        # Record results (使用中文作为 DataFrame 列名)
         results.append({
-            '股票代码': code, # **修改列名**
-            '股票名称': name, # **修改列名**
-            '评分': score,    # **修改列名**
-            '信号数量': len(signals), # **修改列名**
-            '信号详情': ', '.join(chinese_signals), # **修改为中文信号**
-            '最新收盘价': analyzed_data['Close'].iloc[-1] if not analyzed_data.empty else None # **修改列名**
+            '股票代码': code,
+            '股票名称': name,
+            '评分': score,
+            '信号数量': len(signals),
+            '信号详情': ', '.join(chinese_signals), # 信号内容也为中文
+            '最新收盘价': analyzed_data['Close'].iloc[-1] if not analyzed_data.empty else None
         })
 
-        print(f"已处理 {name} ({code})，评分: {score}") # 中文修改
+        # 中文控制台输出
+        print(f"已处理 {name} ({code})，评分: {score}")
 
     # 4. Finalize and Output Results
     output_df = pd.DataFrame(results)
     
     # Filter for stocks with signals (Score > 0)
-    screened_df = output_df[output_df['评分'] > 0].copy() # **使用中文列名**
+    screened_df = output_df[output_df['评分'] > 0].copy() # 使用中文列名
     
     # Sort by Score (descending) and LatestClose (descending)
-    screened_df = screened_df.sort_values(by=['评分', '最新收盘价'], ascending=[False, False]) # **使用中文列名**
+    screened_df = screened_df.sort_values(by=['评分', '最新收盘价'], ascending=[False, False]) # 使用中文列名
     
     # Save results to CSV file
     if not screened_df.empty:
-        screened_df.to_csv(output_file_path, index=False, encoding='utf-8')
-        print(f"\n--- 筛选完成 ---") # 中文修改
-        print(f"已筛选的股票保存到: {output_file_path}") # 中文修改
+        # 确保 CSV 以 UTF-8 编码保存，以正确显示中文
+        screened_df.to_csv(output_file_path, index=False, encoding='utf8')
+        # 中文控制台输出
+        print(f"\n--- 筛选完成 ---")
+        print(f"已筛选的股票保存到: {output_file_path}")
         print(screened_df)
     else:
-        print("\n--- 筛选完成 ---") # 中文修改
-        print("没有股票符合看涨的技术特征标准。") # 中文修改
+        # 中文控制台输出
+        print("\n--- 筛选完成 ---")
+        print("没有股票符合看涨的技术特征标准。")
 
 if __name__ == '__main__':
     # Determine the date string based on command line argument or default
