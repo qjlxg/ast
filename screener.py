@@ -19,7 +19,6 @@ SIGNAL_CN_MAP = {
     'BB_Low_Rebound': '布林带低位反弹',
     'OBV_Inflow': 'OBV资金流入',
     'Low_Vol_Confirm': 'ATR低波动确认',
-    # 【修改 1/3】添加新的三要素共振信号
     'Three_Elements_Resonance': '三要素共振 (均线/价格/量能)'
 }
 # --------------------
@@ -115,7 +114,6 @@ def calculate_all_indicators(df):
 
     # 5. 成交量（Volume）相关计算
     df['Vol_MA5'] = df['Volume'].rolling(window=5, min_periods=1).mean()
-    # 【修改 2/3】添加 Vol_MA20 用于量能判断
     df['Vol_MA20'] = df['Volume'].rolling(window=20, min_periods=1).mean() 
 
     # 6. 布林带（Bollinger Bands）
@@ -134,7 +132,7 @@ def calculate_all_indicators(df):
 
     return df
 
-# --- Uptrend Signal Screening Function (已添加三要素共振逻辑) ---
+# --- Uptrend Signal Screening Function (已包含三要素共振逻辑) ---
 def get_uptrend_signals(df):
     """Screens for bullish technical signals based on calculated indicators."""
     
@@ -145,10 +143,7 @@ def get_uptrend_signals(df):
     latest = df.iloc[-1]
     
     # 确保至少有 20 天数据进行 20 日指标分析
-    if len(df) < 20:
-        # 如果数据不足，只运行基础信号检查，并跳过共振检查
-        pass
-    else:
+    if len(df) >= 20:
         recent_data = df.tail(20)
         
         # --- 【核心信号】三要素共振 (Three Elements Resonance) ---
@@ -296,7 +291,8 @@ def main(date_str=None):
     # 4. Finalize and Output Results
     output_df = pd.DataFrame(results)
     
-    screened_df = output_df[output_df['评分'] > 0].copy()
+    # 【核心修改】只筛选评分大于 5 的股票
+    screened_df = output_df[output_df['评分'] > 5].copy()
     
     # 强制将 '股票代码' 列转换为字符串类型，以保留前导零
     screened_df['股票代码'] = screened_df['股票代码'].astype(str)
@@ -304,13 +300,14 @@ def main(date_str=None):
     screened_df = screened_df.sort_values(by=['评分', '最新收盘价'], ascending=[False, False])
     
     if not screened_df.empty:
+        # 当使用 to_csv 时，由于 '股票代码' 列已经是字符串，它将保留前导零
         screened_df.to_csv(output_file_path, index=False, encoding='utf8')
         print(f"\n--- 筛选完成 ---")
         print(f"已筛选的股票保存到: {output_file_path}")
         print(screened_df)
     else:
         print("\n--- 筛选完成 ---")
-        print("没有股票符合看涨的技术特征标准。")
+        print("没有股票符合看涨的技术特征标准（评分>5）。")
 
 if __name__ == '__main__':
     # Determine the date string based on command line argument or default
