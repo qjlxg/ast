@@ -7,7 +7,7 @@ import sys
 # Define the directory where historical stock data is located
 STOCK_DATA_DIR = 'stock_data'
 
-# --- 信号中文映射表 (已添加新的共振信号) ---
+# --- 信号中文映射表 (更新为“四要素共振”) ---
 SIGNAL_CN_MAP = {
     'MACD_Golden_Cross': 'MACD金叉',
     'MACD_Turning_Positive': 'MACD柱转正',
@@ -19,11 +19,11 @@ SIGNAL_CN_MAP = {
     'BB_Low_Rebound': '布林带低位反弹',
     'OBV_Inflow': 'OBV资金流入',
     'Low_Vol_Confirm': 'ATR低波动确认',
-    'Three_Elements_Resonance': '三要素共振 (均线/价格/量能)'
+    'Three_Elements_Resonance': '四要素共振 (筑底/均线/价格/量能)' # 更新描述
 }
 # --------------------
 
-# --- Function to fetch historical data from local files ---
+# --- Function to fetch historical data from local files (强制补零) ---
 def fetch_stock_ohlc(stock_code, stock_name, end_date):
     """
     Loads OHLCV historical data from the local file system based on the stock code.
@@ -48,7 +48,6 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
         # 数据处理
         df['Date'] = pd.to_datetime(df['Date'])
         df = df.set_index('Date').sort_index()
-        # 确保有足够的历史数据进行20日分析
         df = df[df.index <= pd.to_datetime(end_date)].tail(60) 
 
         # 检查必需列
@@ -77,9 +76,9 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
         return pd.DataFrame()
 
 
-# --- Technical Indicator Calculation Function (已添加 Vol_MA20) ---
+# --- Technical Indicator Calculation Function ---
 def calculate_all_indicators(df):
-    """Calculates MA, MACD, KDJ, RSI, Volume MA, BB, OBV, and ATR indicators."""
+    """Calculates all necessary indicators, including those for filtering and scoring."""
     
     # 1. Moving Averages (MA)
     df['MA5'] = df['Close'].rolling(window=5, min_periods=1).mean()
@@ -93,7 +92,7 @@ def calculate_all_indicators(df):
     df['DEA'] = df['DIF'].ewm(span=9, adjust=False).mean()
     df['MACD'] = (df['DIF'] - df['DEA']) * 2 
 
-    # 3. KDJ Indicator (Parameters 9, 3, 3)
+    # 3. KDJ Indicator
     n = 9
     df['Lown'] = df['Low'].rolling(window=n).min()
     df['Highn'] = df['High'].rolling(window=n).max()
@@ -104,7 +103,7 @@ def calculate_all_indicators(df):
     df['D'] = df['K'].ewm(span=m1, adjust=False).mean()
     df['J'] = 3 * df['K'] - 2 * df['D']
 
-    # 4. RSI Indicator (14 periods)
+    # 4. RSI Indicator
     n_rsi = 14
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=n_rsi).mean()
@@ -130,11 +129,15 @@ def calculate_all_indicators(df):
                                       np.abs(df['Low'] - df['Close'].shift())))
     df['ATR'] = df['TR'].rolling(window=14, min_periods=1).mean()
 
+    # 9. 计算昨日收盘价和前日收盘价，用于短期涨幅过滤
+    df['Prev_Close'] = df['Close'].shift(1)
+    df['Prev2_Close'] = df['Close'].shift(2)
+    
     return df
 
-# --- Uptrend Signal Screening Function (已包含三要素共振逻辑) ---
+# --- Uptrend Signal Screening Function (V6: 明确加入洗盘/筑底确认) ---
 def get_uptrend_signals(df):
-    """Screens for bullish technical signals based on calculated indicators."""
+    """Screens for bullish technical signals based on calculated indicators and applies anti-chasing filters."""
     
     if df.empty or len(df) < 5:
         return 0, {}
@@ -142,76 +145,103 @@ def get_uptrend_signals(df):
     signals = {}
     latest = df.iloc[-1]
     
-    # 确保至少有 20 天数据进行 20 日指标分析
-    if len(df) >= 20:
-        recent_data = df.tail(20)
+    # ----------------------------------------------------
+    # 【第一步】短期超买判断 (避免追高)
+    # ----------------------------------------------------
+    is_overbought = False
+    if len(df) >= 3:
+        # 提取昨日收盘价和前日收盘价
+        prev_close = df.iloc[-2]['Close']
+        prev2_close = df.iloc[-3]['Close']
         
-        # --- 【核心信号】三要素共振 (Three Elements Resonance) ---
+        # 计算昨日涨幅 (如果前日收盘价不为0)
+        yesterday_return = (prev_close - prev2_close) / prev2_close if prev2_close != 0 else 0
         
-        # 元素 1：均线共振 (粘合 + 金叉)
-        # 1.1 均线粘合 (Stickiness): 在最近 20 天，MA5和MA20的平均绝对差值小于2.5%
-        ma_diff_ratio_20d = (recent_data['MA5'] - recent_data['MA20']).abs() / recent_data['MA20']
-        is_ma_sticky = ma_diff_ratio_20d.mean() < 0.025 # 2.5% 容忍度
+        # 计算两天累计涨幅 (如果前日收盘价不为0)
+        two_day_return = (latest['Close'] - prev2_close) / prev2_close if prev2_close != 0 else 0
+
+        # 条件 A: 昨日已涨停 (涨幅 >= 9.5%)
+        is_yesterday_limit_up = yesterday_return >= 0.095
         
-        # 1.2 金叉 (Golden Cross): MA5今天上穿MA20
-        is_golden_cross = (latest['MA5'] > latest['MA20'] and 
-                           df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20'])
-                           
-        is_ma_resonance = is_ma_sticky and is_golden_cross
-
-        # 元素 2：价格突破 (Price Breakthrough)
-        # 2.1 今天的收盘价是过去 20 个交易日（不含今天）中的最高价
-        is_price_breakthrough = latest['Close'] > recent_data['Close'].iloc[:-1].max()
-
-        # 元素 3：量能确认 (Volume Confirmation)
-        # 3.1 今天的成交量显著高于最近 20 日的平均成交量（例如 1.5 倍以上）
-        is_volume_confirm = latest['Volume'] > (1.5 * latest['Vol_MA20'])
+        # 条件 B: 最近两天累计涨幅过高 (例如 15% 以上)
+        is_two_day_soaring = two_day_return >= 0.15 
         
-        # 最终共振确认
-        if is_ma_resonance and is_price_breakthrough and is_volume_confirm:
-            signals['Three_Elements_Resonance'] = True
+        # 如果满足任何一个短期超买条件，则视为超买
+        if is_yesterday_limit_up or is_two_day_soaring:
+            is_overbought = True
 
+    # ----------------------------------------------------
+    # 【第二步】评分计算 (仅对未超买的股票进行高分信号评估)
+    # ----------------------------------------------------
 
-    # --- 1. Momentum Signals (MACD, KDJ) --- (保持原有的基础信号，它们可以独立存在)
-    if latest['DIF'] > latest['DEA'] and df.iloc[-2]['DIF'] <= df.iloc[-2]['DEA']:
-        signals['MACD_Golden_Cross'] = True
-    
-    if latest['MACD'] > 0 and df.iloc[-2]['MACD'] <= 0:
-        signals['MACD_Turning_Positive'] = True
-    
-    if latest['K'] > latest['D'] and df.iloc[-2]['K'] <= df.iloc[-2]['D'] and df['J'].tail(5).min() < 30:
-        signals['KDJ_Golden_Cross_From_Oversold'] = True
+    if not is_overbought:
+        
+        # --- 【核心信号】四要素启动 (Four Elements Launch: 筑底/均线/价格/量能) ---
+        if len(df) >= 20:
+            recent_data = df.tail(20)
+            
+            # 元素 1：筑底/洗盘确认 (Bottoming/Shakeout Confirmation)
+            # 要求：在最近 20 天内，价格曾接近 MA60（长期成本线），且未有效跌破。
+            ma60_avg_20d = recent_data['MA60'].mean()
+            price_low_20d = recent_data['Low'].min()
+            
+            # 筑底条件：最低价在 MA60 均值 5% 以内 (即触及支撑)，且今天已经站上 MA20
+            is_bottoming_confirmed = (price_low_20d >= ma60_avg_20d * 0.95 and  # 20日内最低价未远离 MA60
+                                      latest['Close'] > latest['MA20'])      # 且今天已经站上 MA20
+            
+            # 元素 2：均线共振 (粘合 + 金叉)
+            ma_diff_ratio_20d = (recent_data['MA5'] - recent_data['MA20']).abs() / recent_data['MA20']
+            is_ma_sticky = ma_diff_ratio_20d.mean() < 0.025 # 2.5% 容忍度
+            is_golden_cross = (latest['MA5'] > latest['MA20'] and 
+                               df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20'])
+            is_ma_resonance = is_ma_sticky and is_golden_cross
 
-    # --- 2. Trend Signals (MA Crosses) ---
-    if latest['Close'] > latest['MA5']:
-        signals['Price_Above_MA5'] = True
-    
-    if latest['MA5'] > latest['MA20'] and df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20']:
-        signals['MA_5_20_Golden_Cross'] = True
+            # 元素 3：价格突破 (Price Breakthrough)
+            # 今天的收盘价是过去 20 个交易日（不含今天）中的最高价
+            is_price_breakthrough = latest['Close'] > recent_data['Close'].iloc[:-1].max()
 
-    # --- 3. Strength Signals (RSI) ---
-    if latest['RSI'] > 50 and latest['RSI'] > df.iloc[-5]['RSI']:
-        signals['RSI_Rising_Strongly'] = True
+            # 元素 4：量能确认 (Volume Confirmation)
+            # 今天的成交量显著高于最近 20 日的平均成交量（1.5 倍以上）
+            is_volume_confirm = latest['Volume'] > (1.5 * latest['Vol_MA20'])
+            
+            # 最终四要素共振确认
+            if is_bottoming_confirmed and is_ma_resonance and is_price_breakthrough and is_volume_confirm:
+                signals['Three_Elements_Resonance'] = True
 
-    # --- 4. Community/Real-World Signals ---
-    # 成交量确认：如果现有信号触发，且最新成交量 > Vol_MA5（放量确认）
-    if latest['Volume'] > latest['Vol_MA5'] and ('MACD_Golden_Cross' in signals or 'MA_5_20_Golden_Cross' in signals):
-        signals['Volume_Confirm'] = True
+        # --- 其他基础信号 (用于积累评分) ---
+        
+        if latest['DIF'] > latest['DEA'] and df.iloc[-2]['DIF'] <= df.iloc[-2]['DEA']:
+            signals['MACD_Golden_Cross'] = True
+        
+        if latest['MACD'] > 0 and df.iloc[-2]['MACD'] <= 0:
+            signals['MACD_Turning_Positive'] = True
+        
+        if latest['K'] > latest['D'] and df.iloc[-2]['K'] <= df.iloc[-2]['D'] and df['J'].tail(5).min() < 30:
+            signals['KDJ_Golden_Cross_From_Oversold'] = True
 
-    # 布林带低位反弹
-    if latest['Close'] >= latest['BB_Lower'] and latest['Close'] <= latest['BB_Lower'] * 1.05 and 'RSI_Rising_Strongly' in signals:
-        signals['BB_Low_Rebound'] = True
+        if latest['Close'] > latest['MA5']:
+            signals['Price_Above_MA5'] = True
+        
+        if latest['MA5'] > latest['MA20'] and df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20']:
+            signals['MA_5_20_Golden_Cross'] = True
 
-    # OBV资金流入
-    obv_ma5 = df['OBV'].rolling(window=5, min_periods=1).mean().iloc[-1]
-    if latest['OBV'] > obv_ma5 and 'RSI_Rising_Strongly' in signals:
-        signals['OBV_Inflow'] = True
+        if latest['RSI'] > 50 and latest['RSI'] > df.iloc[-5]['RSI']:
+            signals['RSI_Rising_Strongly'] = True
 
-    # ATR低波动确认
-    atr_ma5 = df['ATR'].rolling(window=5, min_periods=1).mean().iloc[-1]
-    if latest['ATR'] < atr_ma5 and 'MA_5_20_Golden_Cross' in signals:
-        signals['Low_Vol_Confirm'] = True
+        if latest['Volume'] > latest['Vol_MA5'] and ('MACD_Golden_Cross' in signals or 'MA_5_20_Golden_Cross' in signals):
+            signals['Volume_Confirm'] = True
 
+        if latest['Close'] >= latest['BB_Lower'] and latest['Close'] <= latest['BB_Lower'] * 1.05 and 'RSI_Rising_Strongly' in signals:
+            signals['BB_Low_Rebound'] = True
+
+        obv_ma5 = df['OBV'].rolling(window=5, min_periods=1).mean().iloc[-1]
+        if latest['OBV'] > obv_ma5 and 'RSI_Rising_Strongly' in signals:
+            signals['OBV_Inflow'] = True
+
+        atr_ma5 = df['ATR'].rolling(window=5, min_periods=1).mean().iloc[-1]
+        if latest['ATR'] < atr_ma5 and 'MA_5_20_Golden_Cross' in signals:
+            signals['Low_Vol_Confirm'] = True
+        
     score = len(signals)
     return score, signals
 
@@ -219,11 +249,9 @@ def get_uptrend_signals(df):
 def main(date_str=None):
     # 1. Set Date and File Paths
     if date_str is None:
-        # 如果未提供参数，则使用实时日期
         today = datetime.now()
         date_str = today.strftime('%Y%m%d')
     else:
-        # 如果提供了参数，则使用参数指定的日期
         try:
             today = datetime.strptime(date_str, '%Y%m%d')
         except ValueError:
@@ -254,7 +282,6 @@ def main(date_str=None):
     
     # 3. Iterate through stocks, fetch data, calculate indicators, and screen
     for index, row in input_df.iterrows():
-        # 获取原始股票代码和名称
         original_code = row.get('StockCode', row.get('股票代码'))
         name = row.get('StockName', row.get('股票名称', original_code))
         
@@ -273,16 +300,14 @@ def main(date_str=None):
         analyzed_data = calculate_all_indicators(stock_data)
         score, signals = get_uptrend_signals(analyzed_data)
         
-        # 将英文信号名转换为中文并连接
         chinese_signals = [SIGNAL_CN_MAP.get(sig, sig) for sig in signals.keys()] 
         
-        # Record results (使用补零后的代码 code_padded)
         results.append({
             '股票代码': code_padded, 
             '股票名称': name,
             '评分': score,
             '信号数量': len(signals),
-            '信号详情': ', '.join(chinese_signals), # 信号内容也为中文
+            '信号详情': ', '.join(chinese_signals),
             '最新收盘价': analyzed_data['Close'].iloc[-1] if not analyzed_data.empty else None
         })
 
@@ -291,29 +316,26 @@ def main(date_str=None):
     # 4. Finalize and Output Results
     output_df = pd.DataFrame(results)
     
-    # 【核心修改】只筛选评分大于 5 的股票
+    # 只筛选评分大于 5 的股票 (满足您的要求)
     screened_df = output_df[output_df['评分'] > 5].copy()
     
     # 强制将 '股票代码' 列转换为字符串类型，以保留前导零
     screened_df['股票代码'] = screened_df['股票代码'].astype(str)
     
+    # 按照评分和最新收盘价降序排列
     screened_df = screened_df.sort_values(by=['评分', '最新收盘价'], ascending=[False, False])
     
     if not screened_df.empty:
-        # 当使用 to_csv 时，由于 '股票代码' 列已经是字符串，它将保留前导零
         screened_df.to_csv(output_file_path, index=False, encoding='utf8')
         print(f"\n--- 筛选完成 ---")
         print(f"已筛选的股票保存到: {output_file_path}")
         print(screened_df)
     else:
         print("\n--- 筛选完成 ---")
-        print("没有股票符合看涨的技术特征标准（评分>5）。")
+        print("没有股票符合看涨的技术特征标准（评分>5），或所有高分信号均因短期涨幅过大而被过滤。")
 
 if __name__ == '__main__':
-    # Determine the date string based on command line argument or default
     if len(sys.argv) > 1:
-        # 如果提供了参数，则使用参数
         main(sys.argv[1])
     else:
-        # 如果没有提供参数，则让 main 函数自动使用实时日期
         main()
