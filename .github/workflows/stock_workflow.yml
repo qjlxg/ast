@@ -1,4 +1,4 @@
-name: 股票分析工作流 (Stock Analysis Workflow)
+name: 分析工作流 (Stock Analysis Workflow)
 
 on:
   # 触发器 1: 监听对指定文件的 push 操作
