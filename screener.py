@@ -7,7 +7,7 @@ import sys
 # Define the directory where historical stock data is located
 STOCK_DATA_DIR = 'stock_data'
 
-# --- 信号中文映射表 (包含所有社区增强信号) ---
+# --- 信号中文映射表 (已添加新的共振信号) ---
 SIGNAL_CN_MAP = {
     'MACD_Golden_Cross': 'MACD金叉',
     'MACD_Turning_Positive': 'MACD柱转正',
@@ -18,23 +18,22 @@ SIGNAL_CN_MAP = {
     'Volume_Confirm': '成交量确认',
     'BB_Low_Rebound': '布林带低位反弹',
     'OBV_Inflow': 'OBV资金流入',
-    'Low_Vol_Confirm': 'ATR低波动确认'
+    'Low_Vol_Confirm': 'ATR低波动确认',
+    # 【修改 1/3】添加新的三要素共振信号
+    'Three_Elements_Resonance': '三要素共振 (均线/价格/量能)'
 }
 # --------------------
 
-# --- Function to fetch historical data from local files (已修复股票代码补零问题) ---
+# --- Function to fetch historical data from local files ---
 def fetch_stock_ohlc(stock_code, stock_name, end_date):
     """
     Loads OHLCV historical data from the local file system based on the stock code.
-    
-    注意：这里的 stock_code 已经是经过补零的 6 位字符串。
     """
-    # 【修复点】确保股票代码是 6 位，前面补零
+    # 确保股票代码是 6 位，前面补零
     padded_code = str(stock_code).zfill(6) 
-    file_path = os.path.join(STOCK_DATA_DIR, f'{padded_code}.csv') # 使用补零后的代码
+    file_path = os.path.join(STOCK_DATA_DIR, f'{padded_code}.csv')
     
     try:
-        # 尝试读取文件
         df = pd.read_csv(file_path, encoding='utf-8', dtype={'股票代码': str})
         
         # 重命名列
@@ -50,6 +49,7 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
         # 数据处理
         df['Date'] = pd.to_datetime(df['Date'])
         df = df.set_index('Date').sort_index()
+        # 确保有足够的历史数据进行20日分析
         df = df[df.index <= pd.to_datetime(end_date)].tail(60) 
 
         # 检查必需列
@@ -66,12 +66,11 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
                 return pd.DataFrame()
         
         # 添加股票信息并过滤周末
-        df['StockCode'] = stock_code # 使用补零后的代码进行记录
+        df['StockCode'] = padded_code
         df['StockName'] = stock_name
         return df.drop(df[df.index.dayofweek > 4].index)
 
     except FileNotFoundError:
-        # 错误信息使用原始代码和补零后的文件路径，方便调试
         print(f"错误: 找不到股票 {stock_code} 的历史数据文件 {file_path}。跳过。")
         return pd.DataFrame()
     except Exception as e:
@@ -79,7 +78,7 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
         return pd.DataFrame()
 
 
-# --- Technical Indicator Calculation Function ---
+# --- Technical Indicator Calculation Function (已添加 Vol_MA20) ---
 def calculate_all_indicators(df):
     """Calculates MA, MACD, KDJ, RSI, Volume MA, BB, OBV, and ATR indicators."""
     
@@ -116,6 +115,8 @@ def calculate_all_indicators(df):
 
     # 5. 成交量（Volume）相关计算
     df['Vol_MA5'] = df['Volume'].rolling(window=5, min_periods=1).mean()
+    # 【修改 2/3】添加 Vol_MA20 用于量能判断
+    df['Vol_MA20'] = df['Volume'].rolling(window=20, min_periods=1).mean() 
 
     # 6. 布林带（Bollinger Bands）
     df['BB_Mid'] = df['Close'].rolling(window=20, min_periods=1).mean()
@@ -133,7 +134,7 @@ def calculate_all_indicators(df):
 
     return df
 
-# --- Uptrend Signal Screening Function ---
+# --- Uptrend Signal Screening Function (已添加三要素共振逻辑) ---
 def get_uptrend_signals(df):
     """Screens for bullish technical signals based on calculated indicators."""
     
@@ -143,49 +144,75 @@ def get_uptrend_signals(df):
     signals = {}
     latest = df.iloc[-1]
     
-    # --- 1. Momentum Signals (MACD, KDJ) ---
-    # MACD Golden Cross: DIF crosses above DEA
+    # 确保至少有 20 天数据进行 20 日指标分析
+    if len(df) < 20:
+        # 如果数据不足，只运行基础信号检查，并跳过共振检查
+        pass
+    else:
+        recent_data = df.tail(20)
+        
+        # --- 【核心信号】三要素共振 (Three Elements Resonance) ---
+        
+        # 元素 1：均线共振 (粘合 + 金叉)
+        # 1.1 均线粘合 (Stickiness): 在最近 20 天，MA5和MA20的平均绝对差值小于2.5%
+        ma_diff_ratio_20d = (recent_data['MA5'] - recent_data['MA20']).abs() / recent_data['MA20']
+        is_ma_sticky = ma_diff_ratio_20d.mean() < 0.025 # 2.5% 容忍度
+        
+        # 1.2 金叉 (Golden Cross): MA5今天上穿MA20
+        is_golden_cross = (latest['MA5'] > latest['MA20'] and 
+                           df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20'])
+                           
+        is_ma_resonance = is_ma_sticky and is_golden_cross
+
+        # 元素 2：价格突破 (Price Breakthrough)
+        # 2.1 今天的收盘价是过去 20 个交易日（不含今天）中的最高价
+        is_price_breakthrough = latest['Close'] > recent_data['Close'].iloc[:-1].max()
+
+        # 元素 3：量能确认 (Volume Confirmation)
+        # 3.1 今天的成交量显著高于最近 20 日的平均成交量（例如 1.5 倍以上）
+        is_volume_confirm = latest['Volume'] > (1.5 * latest['Vol_MA20'])
+        
+        # 最终共振确认
+        if is_ma_resonance and is_price_breakthrough and is_volume_confirm:
+            signals['Three_Elements_Resonance'] = True
+
+
+    # --- 1. Momentum Signals (MACD, KDJ) --- (保持原有的基础信号，它们可以独立存在)
     if latest['DIF'] > latest['DEA'] and df.iloc[-2]['DIF'] <= df.iloc[-2]['DEA']:
         signals['MACD_Golden_Cross'] = True
     
-    # MACD Histogram Turning Positive: MACD from negative to positive
     if latest['MACD'] > 0 and df.iloc[-2]['MACD'] <= 0:
         signals['MACD_Turning_Positive'] = True
     
-    # KDJ Golden Cross from Oversold: K crosses above D and J was recently below 30
     if latest['K'] > latest['D'] and df.iloc[-2]['K'] <= df.iloc[-2]['D'] and df['J'].tail(5).min() < 30:
         signals['KDJ_Golden_Cross_From_Oversold'] = True
 
     # --- 2. Trend Signals (MA Crosses) ---
-    # Price above MA5
     if latest['Close'] > latest['MA5']:
         signals['Price_Above_MA5'] = True
     
-    # MA5 crosses above MA20
     if latest['MA5'] > latest['MA20'] and df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20']:
         signals['MA_5_20_Golden_Cross'] = True
 
     # --- 3. Strength Signals (RSI) ---
-    # RSI is above 50 and has been rising over the last 5 days
     if latest['RSI'] > 50 and latest['RSI'] > df.iloc[-5]['RSI']:
         signals['RSI_Rising_Strongly'] = True
 
     # --- 4. Community/Real-World Signals ---
-
     # 成交量确认：如果现有信号触发，且最新成交量 > Vol_MA5（放量确认）
     if latest['Volume'] > latest['Vol_MA5'] and ('MACD_Golden_Cross' in signals or 'MA_5_20_Golden_Cross' in signals):
         signals['Volume_Confirm'] = True
 
-    # 布林带低位反弹：如果Close接近BB_Lower且有RSI上升确认
+    # 布林带低位反弹
     if latest['Close'] >= latest['BB_Lower'] and latest['Close'] <= latest['BB_Lower'] * 1.05 and 'RSI_Rising_Strongly' in signals:
         signals['BB_Low_Rebound'] = True
 
-    # OBV资金流入：如果OBV高于短期均值且有RSI上升
+    # OBV资金流入
     obv_ma5 = df['OBV'].rolling(window=5, min_periods=1).mean().iloc[-1]
     if latest['OBV'] > obv_ma5 and 'RSI_Rising_Strongly' in signals:
         signals['OBV_Inflow'] = True
 
-    # ATR低波动确认：如果波动低且金叉
+    # ATR低波动确认
     atr_ma5 = df['ATR'].rolling(window=5, min_periods=1).mean().iloc[-1]
     if latest['ATR'] < atr_ma5 and 'MA_5_20_Golden_Cross' in signals:
         signals['Low_Vol_Confirm'] = True
@@ -220,7 +247,6 @@ def main(date_str=None):
 
     # 2. Read Input CSV File
     try:
-        # 注意：这里我们使用 dtype={'StockCode': str} 来确保代码在读取时已经是字符串
         input_df = pd.read_csv(input_file_path, dtype={'StockCode': str, '股票代码': str})
     except FileNotFoundError:
         print(f"错误: 找不到输入文件 {input_file_path}。该文件必须存在且每日更新。")
@@ -241,7 +267,7 @@ def main(date_str=None):
             print(f"警告: 缺少股票代码，跳过行 {index}。")
             continue
             
-        # 【最终修复点】在传递给 fetch_stock_ohlc 之前，以及记录到 results 之前，进行强制补零
+        # 强制股票代码补零为 6 位
         code_padded = str(original_code).zfill(6)
 
         stock_data = fetch_stock_ohlc(code_padded, name, today)
@@ -257,7 +283,7 @@ def main(date_str=None):
         
         # Record results (使用补零后的代码 code_padded)
         results.append({
-            '股票代码': code_padded, # <--- 确保输出到 CSV 的是 6 位代码
+            '股票代码': code_padded, 
             '股票名称': name,
             '评分': score,
             '信号数量': len(signals),
@@ -272,13 +298,12 @@ def main(date_str=None):
     
     screened_df = output_df[output_df['评分'] > 0].copy()
     
-    # 在排序前，强制将 '股票代码' 列转换为字符串类型，以确保排序和输出的格式正确性（尽管前面已补零）
+    # 强制将 '股票代码' 列转换为字符串类型，以保留前导零
     screened_df['股票代码'] = screened_df['股票代码'].astype(str)
     
     screened_df = screened_df.sort_values(by=['评分', '最新收盘价'], ascending=[False, False])
     
     if not screened_df.empty:
-        # 当使用 to_csv 时，由于 '股票代码' 列已经是字符串，它将保留前导零
         screened_df.to_csv(output_file_path, index=False, encoding='utf8')
         print(f"\n--- 筛选完成 ---")
         print(f"已筛选的股票保存到: {output_file_path}")
