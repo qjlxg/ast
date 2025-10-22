@@ -5,6 +5,7 @@ import os
 import sys
 
 # Define the directory where historical stock data is located
+# 定义历史股票数据所在的目录
 STOCK_DATA_DIR = 'stock_data'
 
 # --- 信号中文映射表 (已增加短周期共振信号) ---
@@ -20,8 +21,8 @@ SIGNAL_CN_MAP = {
     'OBV_Inflow': 'OBV资金流入',
     'Low_Vol_Confirm': 'ATR低波动确认',
     'Three_Elements_Resonance': '四要素共振 (筑底/均线/价格/量能)',
-    'MA_5_10_Golden_Cross': 'MA5-MA10金叉 (短线趋势)',       # 新增
-    'KDJ_MA_Fast_Resonance': '短周期共振 (KDJ/MA5-10)'   # 新增
+    'MA_5_10_Golden_Cross': 'MA5-MA10金叉 (短线趋势)',
+    'KDJ_MA_Fast_Resonance': '短周期共振 (KDJ/MA5-10)'
 }
 # --------------------
 
@@ -29,12 +30,14 @@ SIGNAL_CN_MAP = {
 def fetch_stock_ohlc(stock_code, stock_name, end_date):
     """
     Loads OHLCV historical data from the local file system based on the stock code.
+    根据股票代码从本地文件系统加载 OHLCV 历史数据。
     """
     # 确保股票代码是 6 位，前面补零
     padded_code = str(stock_code).zfill(6) 
     file_path = os.path.join(STOCK_DATA_DIR, f'{padded_code}.csv')
     
     try:
+        # 使用低内存设置读取 CSV
         df = pd.read_csv(file_path, encoding='utf-8', dtype={'股票代码': str})
         
         # 重命名列
@@ -50,12 +53,14 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
         # 数据处理
         df['Date'] = pd.to_datetime(df['Date'])
         df = df.set_index('Date').sort_index()
+        # 只保留截止日期前60天的数据
         df = df[df.index <= pd.to_datetime(end_date)].tail(60) 
 
-        # 检查必需列
+        # 检查必需列并转换为数字
         required_cols = ['Open', 'Close', 'High', 'Low', 'Volume']
         for col in required_cols:
             try:
+                # 尝试转换为数字，错误值设为 NaN
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             except Exception:
                 print(f"警告: 股票 {stock_code} 的 '{col}' 列无法转换为数字。跳过。")
@@ -128,8 +133,8 @@ def calculate_all_indicators(df):
 
     # 8. ATR（Average True Range）
     df['TR'] = np.maximum(df['High'] - df['Low'], 
-                           np.maximum(np.abs(df['High'] - df['Close'].shift()), 
-                                      np.abs(df['Low'] - df['Close'].shift())))
+                             np.maximum(np.abs(df['High'] - df['Close'].shift()), 
+                                         np.abs(df['Low'] - df['Close'].shift())))
     df['ATR'] = df['TR'].rolling(window=14, min_periods=1).mean()
 
     # 9. 计算昨日收盘价和前日收盘价，用于短期涨幅过滤
@@ -183,7 +188,7 @@ def get_uptrend_signals(df):
             price_low_20d = recent_data['Low'].min()
             
             is_bottoming_confirmed = (price_low_20d >= ma60_avg_20d * 0.95 and  
-                                      latest['Close'] > latest['MA20'])     
+                                      latest['Close'] > latest['MA20'])      
             
             # 元素 2：均线共振 
             ma_diff_ratio_20d = (recent_data['MA5'] - recent_data['MA20']).abs() / recent_data['MA20']
@@ -219,7 +224,12 @@ def get_uptrend_signals(df):
         if latest['Close'] > latest['MA5']:
             signals['Price_Above_MA5'] = True
         
-        if len(df) >= 20 and is_golden_cross_5_20: # 使用上面计算的变量，避免重复计算
+        # 重新计算 is_golden_cross_5_20 (如果上面没有计算过，这里重新计算确保变量可用)
+        if 'is_golden_cross_5_20' not in locals():
+            is_golden_cross_5_20 = len(df) >= 20 and (latest['MA5'] > latest['MA20'] and 
+                                                     df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20'])
+            
+        if len(df) >= 20 and is_golden_cross_5_20:
             signals['MA_5_20_Golden_Cross'] = True
         
         # 新增: MA5-MA10 Golden Cross (短线趋势确认)
@@ -237,9 +247,11 @@ def get_uptrend_signals(df):
         if latest['RSI'] > 50 and latest['RSI'] > df.iloc[-5]['RSI']:
             signals['RSI_Rising_Strongly'] = True
 
+        # 成交量确认需要与 MACD 或 MA5-20 金叉同时发生
         if latest['Volume'] > latest['Vol_MA5'] and ('MACD_Golden_Cross' in signals or 'MA_5_20_Golden_Cross' in signals):
             signals['Volume_Confirm'] = True
 
+        # 布林带低位反弹需要伴随RSI强劲上涨
         if latest['Close'] >= latest['BB_Lower'] and latest['Close'] <= latest['BB_Lower'] * 1.05 and 'RSI_Rising_Strongly' in signals:
             signals['BB_Low_Rebound'] = True
 
@@ -291,6 +303,7 @@ def main(date_str=None):
     
     # 3. Iterate through stocks, fetch data, calculate indicators, and screen
     for index, row in input_df.iterrows():
+        # 兼容不同的列名
         original_code = row.get('StockCode', row.get('股票代码'))
         name = row.get('StockName', row.get('股票名称', original_code))
         
@@ -308,37 +321,70 @@ def main(date_str=None):
         analyzed_data = calculate_all_indicators(stock_data)
         score, signals = get_uptrend_signals(analyzed_data)
         
-        chinese_signals = [SIGNAL_CN_MAP.get(sig, sig) for sig in signals.keys()] 
-        
-        results.append({
-            '股票代码': code_padded, 
-            '股票名称': name,
-            '评分': score,
-            '信号数量': len(signals),
-            '信号详情': ', '.join(chinese_signals),
-            '最新收盘价': analyzed_data['Close'].iloc[-1] if not analyzed_data.empty else None
-        })
+        # 只记录评分大于 5 的结果，以减少内存占用
+        if score > 5:
+            chinese_signals = [SIGNAL_CN_MAP.get(sig, sig) for sig in signals.keys()] 
+            
+            results.append({
+                '股票代码': code_padded, 
+                '股票名称': name,
+                '评分': score,
+                '信号数量': len(signals),
+                '信号详情': ', '.join(chinese_signals),
+                '最新收盘价': analyzed_data['Close'].iloc[-1] if not analyzed_data.empty else None
+            })
 
         print(f"已处理 {name} ({code_padded})，评分: {score}")
 
     # 4. Finalize and Output Results
     output_df = pd.DataFrame(results)
     
-    # 只筛选评分大于 5 的股票 (维持您的要求)
-    screened_df = output_df[output_df['评分'] > 5].copy()
+    # 将新结果的股票代码转换为字符串类型
+    if not output_df.empty:
+        output_df['股票代码'] = output_df['股票代码'].astype(str)
+
+    # --- 新增去重和追加逻辑 ---
     
-    screened_df['股票代码'] = screened_df['股票代码'].astype(str)
-    
-    screened_df = screened_df.sort_values(by=['评分', '最新收盘价'], ascending=[False, False])
-    
-    if not screened_df.empty:
-        screened_df.to_csv(output_file_path, index=False, encoding='utf8')
+    final_screened_df = pd.DataFrame() # 初始化最终结果
+
+    # 检查输出文件是否已存在
+    if os.path.exists(output_file_path):
+        print(f"\n检测到历史筛选结果，开始追加和去重...")
+        try:
+            # 读取现有数据，确保股票代码为字符串类型
+            existing_df = pd.read_csv(output_file_path, encoding='utf8', dtype={'股票代码': str})
+            
+            # 合并新旧数据，新的数据在后
+            combined_df = pd.concat([existing_df, output_df], ignore_index=True)
+            
+            # 根据 '股票代码' 去重，保留最新（即后追加的，也就是本次运行的）数据
+            final_screened_df = combined_df.drop_duplicates(subset=['股票代码'], keep='last').copy()
+            
+        except Exception as e:
+            print(f"警告: 读取或合并历史文件失败 ({e})，本次结果将作为新文件写入。")
+            final_screened_df = output_df
+    else:
+        # 如果文件不存在，则直接使用本次筛选结果
+        final_screened_df = output_df
+        
+    # 5. 最终排序和保存
+    if not final_screened_df.empty:
+        # 重新排序（保持原脚本的排序逻辑）
+        final_screened_df = final_screened_df.sort_values(
+            by=['评分', '最新收盘价'], 
+            ascending=[False, False]
+        )
+        
+        final_screened_df.to_csv(output_file_path, index=False, encoding='utf8')
         print(f"\n--- 筛选完成 ---")
-        print(f"已筛选的股票保存到: {output_file_path}")
-        print(screened_df)
+        print(f"已去重并追加的股票保存到: {output_file_path}")
+        print(f"总计符合条件（评分>5）的股票数量: {len(final_screened_df)}")
+        # 打印前20条结果
+        print(final_screened_df.head(20).to_string())
     else:
         print("\n--- 筛选完成 ---")
         print("没有股票符合看涨的技术特征标准（评分>5），或所有高分信号均因短期涨幅过大而被过滤。")
+
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
