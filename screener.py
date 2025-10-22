@@ -193,6 +193,7 @@ def get_uptrend_signals(df):
             # 元素 2：均线共振 
             ma_diff_ratio_20d = (recent_data['MA5'] - recent_data['MA20']).abs() / recent_data['MA20']
             is_ma_sticky = ma_diff_ratio_20d.mean() < 0.025 
+            # 确保 is_golden_cross_5_20 的定义在 if 块内
             is_golden_cross_5_20 = (latest['MA5'] > latest['MA20'] and 
                                     df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20'])
             is_ma_resonance = is_ma_sticky and is_golden_cross_5_20
@@ -224,12 +225,15 @@ def get_uptrend_signals(df):
         if latest['Close'] > latest['MA5']:
             signals['Price_Above_MA5'] = True
         
-        # 重新计算 is_golden_cross_5_20 (如果上面没有计算过，这里重新计算确保变量可用)
+        # 确保 is_golden_cross_5_20 在这里定义，以防上面四要素逻辑未执行
         if 'is_golden_cross_5_20' not in locals():
-            is_golden_cross_5_20 = len(df) >= 20 and (latest['MA5'] > latest['MA20'] and 
-                                                     df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20'])
+            if len(df) >= 20:
+                is_golden_cross_5_20 = (latest['MA5'] > latest['MA20'] and 
+                                        df.iloc[-2]['MA5'] <= df.iloc[-2]['MA20'])
+            else:
+                is_golden_cross_5_20 = False
             
-        if len(df) >= 20 and is_golden_cross_5_20:
+        if is_golden_cross_5_20:
             signals['MA_5_20_Golden_Cross'] = True
         
         # 新增: MA5-MA10 Golden Cross (短线趋势确认)
@@ -311,6 +315,7 @@ def main(date_str=None):
             print(f"警告: 缺少股票代码，跳过行 {index}。")
             continue
             
+        # 确保股票代码是 6 位字符串
         code_padded = str(original_code).zfill(6)
 
         stock_data = fetch_stock_ohlc(code_padded, name, today)
@@ -321,7 +326,7 @@ def main(date_str=None):
         analyzed_data = calculate_all_indicators(stock_data)
         score, signals = get_uptrend_signals(analyzed_data)
         
-        # 只记录评分大于 5 的结果，以减少内存占用
+        # 只记录评分大于 5 的结果
         if score > 5:
             chinese_signals = [SIGNAL_CN_MAP.get(sig, sig) for sig in signals.keys()] 
             
@@ -337,38 +342,48 @@ def main(date_str=None):
         print(f"已处理 {name} ({code_padded})，评分: {score}")
 
     # 4. Finalize and Output Results
-    output_df = pd.DataFrame(results)
+    new_results_df = pd.DataFrame(results)
     
     # 将新结果的股票代码转换为字符串类型
-    if not output_df.empty:
-        output_df['股票代码'] = output_df['股票代码'].astype(str)
+    if not new_results_df.empty:
+        new_results_df['股票代码'] = new_results_df['股票代码'].astype(str)
 
-    # --- 新增去重和追加逻辑 ---
+    # --- 关键去重和追加逻辑修正 ---
     
-    final_screened_df = pd.DataFrame() # 初始化最终结果
+    final_screened_df = new_results_df.copy() # 默认使用本次结果
 
     # 检查输出文件是否已存在
     if os.path.exists(output_file_path):
         print(f"\n检测到历史筛选结果，开始追加和去重...")
         try:
-            # 读取现有数据，确保股票代码为字符串类型
-            existing_df = pd.read_csv(output_file_path, encoding='utf8', dtype={'股票代码': str})
+            # 关键修正：读取现有数据，明确指定 '股票代码' 为 str 类型
+            existing_df = pd.read_csv(
+                output_file_path, 
+                encoding='utf8', 
+                dtype={'股票代码': str} # 确保类型一致
+            )
             
             # 合并新旧数据，新的数据在后
-            combined_df = pd.concat([existing_df, output_df], ignore_index=True)
+            # 注意：旧文件的 '评分' 和 '最新收盘价' 可能被读作 float/int，但 '股票代码' 必须是 str
+            combined_df = pd.concat([existing_df, new_results_df], ignore_index=True)
             
             # 根据 '股票代码' 去重，保留最新（即后追加的，也就是本次运行的）数据
-            final_screened_df = combined_df.drop_duplicates(subset=['股票代码'], keep='last').copy()
+            final_screened_df = combined_df.drop_duplicates(
+                subset=['股票代码'], 
+                keep='last'
+            ).copy()
             
         except Exception as e:
-            print(f"警告: 读取或合并历史文件失败 ({e})，本次结果将作为新文件写入。")
-            final_screened_df = output_df
-    else:
-        # 如果文件不存在，则直接使用本次筛选结果
-        final_screened_df = output_df
-        
+            print(f"严重警告: 读取或合并历史文件失败 ({e})，本次结果将作为新文件写入。")
+            final_screened_df = new_results_df
+    
     # 5. 最终排序和保存
     if not final_screened_df.empty:
+        
+        # 重新确保评分和价格是可排序的数值类型
+        final_screened_df['评分'] = pd.to_numeric(final_screened_df['评分'], errors='coerce')
+        final_screened_df['最新收盘价'] = pd.to_numeric(final_screened_df['最新收盘价'], errors='coerce')
+
         # 重新排序（保持原脚本的排序逻辑）
         final_screened_df = final_screened_df.sort_values(
             by=['评分', '最新收盘价'], 
