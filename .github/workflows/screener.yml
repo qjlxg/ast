@@ -59,3 +59,4 @@ jobs:
           file_pattern: screened_signals/${{ env.TODAY_DATE }}/*.csv
           commit_message: "🤖 Daily Stock Screening Results for ${{ env.TODAY_DATE }}"
           skip_dirty_check: true
+          force_push: true
