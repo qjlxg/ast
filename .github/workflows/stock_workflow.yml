@@ -40,7 +40,7 @@ jobs:
         pip install pandas  # 确保安装了 pandas
         echo "依赖安装步骤完成。"
 
-    - name: 运行股票分析脚本 (Run Stock Analysis Script)
+    - name: 运行脚本 (Run Stock Analysis Script)
       run: |
         echo "工作流当前运行的时区和时间: $TZ $(date)"
         python stock_analysis_v2.py
