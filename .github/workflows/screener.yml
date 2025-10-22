@@ -1,0 +1,57 @@
+name: Daily Stock Screener -3
+
+on:
+  # 1. 允许手动触发工作流
+  workflow_dispatch:
+  
+  # 2. 自动在代码变更时触发，用于开发和测试
+  push:
+    branches:
+      - main  # 假设主分支为 main
+      - master # 兼容 master 分支
+    paths:
+      - 'screener.py'
+      - '.github/workflows/screener.yml'
+      
+  # 3. 每日定时运行 (对应 UTC 09:00，即上海时间 17:00 CST)
+  schedule:
+    - cron: '0 9 * * *' 
+
+jobs:
+  run_screener:
+    runs-on: ubuntu-latest
+    
+    # 设置一个环境变量来模拟今天的日期 (例如 '20251022')
+    # 在生产环境中，建议移除此环境变量，让 Python 脚本使用 datetime.now() 来获取实时日期
+    env:
+      TODAY_DATE: 20251022 
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          
+      - name: Install dependencies
+        run: |
+          # Install required libraries: pandas, numpy
+          python -m pip install --upgrade pip
+          pip install pandas numpy
+
+      - name: Run Stock Screener Script
+        # 执行 Python 脚本，传入日期参数。
+        # 脚本将查找 buy_signals/${TODAY_DATE}/${TODAY_DATE}.csv 和 stock_data/*.csv 文件。
+        # 如果 buy_signals 文件不存在，脚本将终止运行。
+        run: python screener.py ${{ env.TODAY_DATE }}
+
+      - name: Commit and Push results
+        # 将生成的筛选结果文件提交回仓库
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          # 只提交生成的筛选结果文件
+          file_pattern: screened_signals/${{ env.TODAY_DATE }}/*.csv
+          commit_message: "🤖 Daily Stock Screening Results for ${{ env.TODAY_DATE }}"
+          skip_dirty_check: true
