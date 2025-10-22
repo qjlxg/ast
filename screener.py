@@ -26,6 +26,8 @@ SIGNAL_CN_MAP = {
 def fetch_stock_ohlc(stock_code, stock_name, end_date):
     """
     Loads OHLCV historical data from the local file system based on the stock code.
+    
+    注意：这里的 stock_code 已经是经过补零的 6 位字符串。
     """
     # 【修复点】确保股票代码是 6 位，前面补零
     padded_code = str(stock_code).zfill(6) 
@@ -64,11 +66,12 @@ def fetch_stock_ohlc(stock_code, stock_name, end_date):
                 return pd.DataFrame()
         
         # 添加股票信息并过滤周末
-        df['StockCode'] = stock_code
+        df['StockCode'] = stock_code # 使用补零后的代码进行记录
         df['StockName'] = stock_name
         return df.drop(df[df.index.dayofweek > 4].index)
 
     except FileNotFoundError:
+        # 错误信息使用原始代码和补零后的文件路径，方便调试
         print(f"错误: 找不到股票 {stock_code} 的历史数据文件 {file_path}。跳过。")
         return pd.DataFrame()
     except Exception as e:
@@ -217,7 +220,8 @@ def main(date_str=None):
 
     # 2. Read Input CSV File
     try:
-        input_df = pd.read_csv(input_file_path, dtype={'StockCode': str})
+        # 注意：这里我们使用 dtype={'StockCode': str} 来确保代码在读取时已经是字符串
+        input_df = pd.read_csv(input_file_path, dtype={'StockCode': str, '股票代码': str})
     except FileNotFoundError:
         print(f"错误: 找不到输入文件 {input_file_path}。该文件必须存在且每日更新。")
         sys.exit(1)
@@ -229,16 +233,18 @@ def main(date_str=None):
     
     # 3. Iterate through stocks, fetch data, calculate indicators, and screen
     for index, row in input_df.iterrows():
-        # 获取股票代码和名称
-        code = row.get('StockCode', row.get('股票代码'))
-        name = row.get('StockName', row.get('股票名称', code))
+        # 获取原始股票代码和名称
+        original_code = row.get('StockCode', row.get('股票代码'))
+        name = row.get('StockName', row.get('股票名称', original_code))
         
-        if not code:
+        if not original_code:
             print(f"警告: 缺少股票代码，跳过行 {index}。")
             continue
+            
+        # 【最终修复点】在传递给 fetch_stock_ohlc 之前，以及记录到 results 之前，进行强制补零
+        code_padded = str(original_code).zfill(6)
 
-        # 加载历史数据，代码会在 fetch_stock_ohlc 中自动补零
-        stock_data = fetch_stock_ohlc(code, name, today)
+        stock_data = fetch_stock_ohlc(code_padded, name, today)
         
         if stock_data.empty:
             continue
@@ -249,9 +255,9 @@ def main(date_str=None):
         # 将英文信号名转换为中文并连接
         chinese_signals = [SIGNAL_CN_MAP.get(sig, sig) for sig in signals.keys()] 
         
-        # Record results (使用中文作为 DataFrame 列名)
+        # Record results (使用补零后的代码 code_padded)
         results.append({
-            '股票代码': code,
+            '股票代码': code_padded, # <--- 确保输出到 CSV 的是 6 位代码
             '股票名称': name,
             '评分': score,
             '信号数量': len(signals),
@@ -259,16 +265,20 @@ def main(date_str=None):
             '最新收盘价': analyzed_data['Close'].iloc[-1] if not analyzed_data.empty else None
         })
 
-        print(f"已处理 {name} ({code})，评分: {score}")
+        print(f"已处理 {name} ({code_padded})，评分: {score}")
 
     # 4. Finalize and Output Results
     output_df = pd.DataFrame(results)
     
     screened_df = output_df[output_df['评分'] > 0].copy()
     
+    # 在排序前，强制将 '股票代码' 列转换为字符串类型，以确保排序和输出的格式正确性（尽管前面已补零）
+    screened_df['股票代码'] = screened_df['股票代码'].astype(str)
+    
     screened_df = screened_df.sort_values(by=['评分', '最新收盘价'], ascending=[False, False])
     
     if not screened_df.empty:
+        # 当使用 to_csv 时，由于 '股票代码' 列已经是字符串，它将保留前导零
         screened_df.to_csv(output_file_path, index=False, encoding='utf8')
         print(f"\n--- 筛选完成 ---")
         print(f"已筛选的股票保存到: {output_file_path}")
