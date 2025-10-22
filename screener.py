@@ -22,12 +22,14 @@ SIGNAL_CN_MAP = {
 }
 # --------------------
 
-# --- Function to fetch historical data from local files ---
+# --- Function to fetch historical data from local files (已修复股票代码补零问题) ---
 def fetch_stock_ohlc(stock_code, stock_name, end_date):
     """
     Loads OHLCV historical data from the local file system based on the stock code.
     """
-    file_path = os.path.join(STOCK_DATA_DIR, f'{stock_code}.csv')
+    # 【修复点】确保股票代码是 6 位，前面补零
+    padded_code = str(stock_code).zfill(6) 
+    file_path = os.path.join(STOCK_DATA_DIR, f'{padded_code}.csv') # 使用补零后的代码
     
     try:
         # 尝试读取文件
@@ -192,7 +194,7 @@ def get_uptrend_signals(df):
 def main(date_str=None):
     # 1. Set Date and File Paths
     if date_str is None:
-        # 【关键修改】如果未提供参数，则使用实时日期
+        # 如果未提供参数，则使用实时日期
         today = datetime.now()
         date_str = today.strftime('%Y%m%d')
     else:
@@ -227,6 +229,7 @@ def main(date_str=None):
     
     # 3. Iterate through stocks, fetch data, calculate indicators, and screen
     for index, row in input_df.iterrows():
+        # 获取股票代码和名称
         code = row.get('StockCode', row.get('股票代码'))
         name = row.get('StockName', row.get('股票名称', code))
         
@@ -234,6 +237,7 @@ def main(date_str=None):
             print(f"警告: 缺少股票代码，跳过行 {index}。")
             continue
 
+        # 加载历史数据，代码会在 fetch_stock_ohlc 中自动补零
         stock_data = fetch_stock_ohlc(code, name, today)
         
         if stock_data.empty:
@@ -276,8 +280,8 @@ def main(date_str=None):
 if __name__ == '__main__':
     # Determine the date string based on command line argument or default
     if len(sys.argv) > 1:
-        # 如果提供了参数（例如来自 YAML），则使用参数
+        # 如果提供了参数，则使用参数
         main(sys.argv[1])
     else:
-        # 【关键修改】如果没有提供参数，则让 main 函数自动使用实时日期
+        # 如果没有提供参数，则让 main 函数自动使用实时日期
         main()
