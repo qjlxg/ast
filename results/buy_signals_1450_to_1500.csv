@@ -1,12 +1,8 @@
 ﻿股票代码,股票名称,买入信号,评分,图表路径
-300051,琏升科技,RSI值为32.17，处于低位回升阶段; KDJ低位金叉,30,results/300051_琏升科技_analysis.png
-300057,万顺新材,RSI值为47.09，处于低位回升阶段; KDJ低位金叉,30,results/300057_万顺新材_analysis.png
-300059,东方财富,RSI值为44.46，处于低位回升阶段; KDJ低位金叉,30,results/300059_东方财富_analysis.png
-300067,安诺其,RSI值为34.15，处于低位回升阶段; KDJ低位金叉,30,results/300067_安诺其_analysis.png
-300071,福石控股,RSI值为45.74，处于低位回升阶段; MACD金叉形成; KDJ低位金叉,50,results/300071_福石控股_analysis.png
-300075,数字政通,RSI值为40.06，处于低位回升阶段; KDJ低位金叉,30,results/300075_数字政通_analysis.png
-300083,创世纪,RSI值为31.03，处于低位回升阶段; KDJ低位金叉,30,results/300083_创世纪_analysis.png
-300085,银之杰,RSI值为35.62，处于低位回升阶段; KDJ低位金叉,30,results/300085_银之杰_analysis.png
-300091,金通灵,RSI值为48.00，处于低位回升阶段; KDJ低位金叉,30,results/300091_金通灵_analysis.png
-300092,科新机电,RSI值为35.64，处于低位回升阶段; KDJ低位金叉,30,results/300092_科新机电_analysis.png
-300094,国联水产,RSI值为43.18，处于低位回升阶段; MACD金叉形成,35,results/300094_国联水产_analysis.png
+300046,台基股份,RSI值为38.50，处于低位回升阶段; KDJ低位金叉,30,results/300046_台基股份_analysis.png
+300061,旗天科技,RSI值为33.89，处于低位回升阶段; MACD金叉形成,35,results/300061_旗天科技_analysis.png
+300063,天龙集团,RSI值为30.32，处于低位回升阶段; KDJ低位金叉,30,results/300063_天龙集团_analysis.png
+300067,安诺其,RSI值为33.33，处于低位回升阶段; MACD金叉形成,35,results/300067_安诺其_analysis.png
+300079,数码视讯,RSI值为43.12，处于低位回升阶段; KDJ低位金叉,30,results/300079_数码视讯_analysis.png
+300080,易成新能,"KDJ低位金叉; 放量上涨: 量比2.06, 涨幅6.33%",30,results/300080_易成新能_analysis.png
+300084,海默科技,"MACD金叉形成; 放量上涨: 量比3.79, 涨幅4.00%; 突破20日前高",50,results/300084_海默科技_analysis.png
