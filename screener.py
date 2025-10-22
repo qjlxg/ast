@@ -7,6 +7,17 @@ import sys
 # Define the directory where historical stock data is located
 STOCK_DATA_DIR = 'stock_data'
 
+# --- 信号中文映射表 ---
+SIGNAL_CN_MAP = {
+    'MACD_Golden_Cross': 'MACD金叉',
+    'MACD_Bar_Turned_Positive': 'MACD柱转正',
+    'KDJ_Oversold_Golden_Cross': 'KDJ超卖金叉',
+    'Price_Cross_MA5': '价格上穿MA5',
+    'MA_5_20_Golden_Cross': 'MA5-MA20金叉',
+    'RSI_Rising_Strongly': 'RSI强劲上涨'
+}
+# --------------------
+
 # --- Function to fetch historical data from local files ---
 def fetch_stock_ohlc(stock_code, stock_name, end_date):
     """
@@ -174,9 +185,9 @@ def main(date_str=None):
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"--- Starting Stock Screener, Date: {date_str} ---")
-    print(f"Input file path: {input_file_path}")
-    print(f"Historical data directory: {STOCK_DATA_DIR}")
+    print(f"--- 启动股票筛选器，日期: {date_str} ---") # 中文修改
+    print(f"输入文件路径: {input_file_path}")        # 中文修改
+    print(f"历史数据目录: {STOCK_DATA_DIR}")        # 中文修改
 
     # 2. Read Input CSV File
     try:
@@ -184,10 +195,10 @@ def main(date_str=None):
         input_df = pd.read_csv(input_file_path, dtype={'StockCode': str})
     except FileNotFoundError:
         # As per user request, terminate if the input file is not found
-        print(f"Error: Input file {input_file_path} not found. This file must exist and be updated daily.")
+        print(f"错误: 找不到输入文件 {input_file_path}。该文件必须存在且每日更新。") # 中文修改
         sys.exit(1)
     except Exception as e:
-        print(f"Unknown error reading input file {input_file_path}: {e}")
+        print(f"错误: 读取输入文件 {input_file_path} 时发生未知错误: {e}") # 中文修改
         sys.exit(1)
         
     results = []
@@ -198,7 +209,7 @@ def main(date_str=None):
         name = row.get('StockName', row.get('股票名称', code))
         
         if not code:
-            print(f"Warning: Skipping row {index} due to missing stock code.")
+            print(f"警告: 缺少股票代码，跳过行 {index}。") # 中文修改
             continue
 
         # Load historical data from local file
@@ -213,36 +224,39 @@ def main(date_str=None):
         # Screen for signals
         score, signals = get_uptrend_signals(analyzed_data)
         
+        # 将英文信号名转换为中文并连接
+        chinese_signals = [SIGNAL_CN_MAP.get(sig, sig) for sig in signals.keys()] # **新增：中文转换**
+        
         # Record results
         results.append({
-            'StockCode': code,
-            'StockName': name,
-            'Score': score,
-            'SignalCount': len(signals),
-            'SignalDetails': ', '.join(signals.keys()),
-            'LatestClose': analyzed_data['Close'].iloc[-1] if not analyzed_data.empty else None
+            '股票代码': code, # **修改列名**
+            '股票名称': name, # **修改列名**
+            '评分': score,    # **修改列名**
+            '信号数量': len(signals), # **修改列名**
+            '信号详情': ', '.join(chinese_signals), # **修改为中文信号**
+            '最新收盘价': analyzed_data['Close'].iloc[-1] if not analyzed_data.empty else None # **修改列名**
         })
 
-        print(f"Processed {name} ({code}), Score: {score}")
+        print(f"已处理 {name} ({code})，评分: {score}") # 中文修改
 
     # 4. Finalize and Output Results
     output_df = pd.DataFrame(results)
     
     # Filter for stocks with signals (Score > 0)
-    screened_df = output_df[output_df['Score'] > 0].copy()
+    screened_df = output_df[output_df['评分'] > 0].copy() # **使用中文列名**
     
     # Sort by Score (descending) and LatestClose (descending)
-    screened_df = screened_df.sort_values(by=['Score', 'LatestClose'], ascending=[False, False])
+    screened_df = screened_df.sort_values(by=['评分', '最新收盘价'], ascending=[False, False]) # **使用中文列名**
     
     # Save results to CSV file
     if not screened_df.empty:
         screened_df.to_csv(output_file_path, index=False, encoding='utf-8')
-        print(f"\n--- Screening Complete ---")
-        print(f"Filtered stocks saved to: {output_file_path}")
+        print(f"\n--- 筛选完成 ---") # 中文修改
+        print(f"已筛选的股票保存到: {output_file_path}") # 中文修改
         print(screened_df)
     else:
-        print("\n--- Screening Complete ---")
-        print("No stocks matched the bullish technical characteristics criteria.")
+        print("\n--- 筛选完成 ---") # 中文修改
+        print("没有股票符合看涨的技术特征标准。") # 中文修改
 
 if __name__ == '__main__':
     # Determine the date string based on command line argument or default
