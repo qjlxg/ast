@@ -1,65 +1,65 @@
-StockCode,StockName,Score,SignalCount,SignalDetails,LatestClose
-300042,朗科科技,5,5,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, KDJ_Oversold_Golden_Cross, Price_Cross_MA5, RSI_Rising_Strongly",30.54
-300132,青松股份,5,5,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, Price_Cross_MA5, MA_5_20_Golden_Cross, RSI_Rising_Strongly",6.44
-300375,鹏翎股份,5,5,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, KDJ_Oversold_Golden_Cross, Price_Cross_MA5, RSI_Rising_Strongly",5.06
-300142,沃森生物,4,4,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, KDJ_Oversold_Golden_Cross, Price_Cross_MA5",11.49
-300407,凯发电气,4,4,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, Price_Cross_MA5, RSI_Rising_Strongly",10.91
-300453,三鑫医疗,4,4,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, Price_Cross_MA5, RSI_Rising_Strongly",9.21
-300169,天晟新材,4,4,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, KDJ_Oversold_Golden_Cross, Price_Cross_MA5",7.05
-300272,开能健康,4,4,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, KDJ_Oversold_Golden_Cross, Price_Cross_MA5",6.52
-300123,亚光科技,4,4,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, KDJ_Oversold_Golden_Cross, Price_Cross_MA5",5.82
-300191,潜能恒信,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",21.26
-300374,中铁装配,3,3,"KDJ_Oversold_Golden_Cross, MA_5_20_Golden_Cross, RSI_Rising_Strongly",17.14
-300504,天邑股份,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",14.18
-300417,南华仪器,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",13.14
-300497,富祥药业,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",10.54
-300404,博济医药,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",9.98
-300112,万讯自控,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",8.8
-300154,瑞凌股份,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",8.77
-300359,全通教育,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, Price_Cross_MA5",5.51
-300234,开尔新材,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",5.48
-300157,新锦动力,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, RSI_Rising_Strongly",4.93
-300094,国联水产,3,3,"MACD_Golden_Cross, MACD_Bar_Turned_Positive, Price_Cross_MA5",3.63
-300085,银之杰,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",48.57
-300508,维宏股份,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",28.02
-300059,东方财富,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",25.42
-300415,伊之密,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",24.16
-300199,翰宇药业,2,2,"MACD_Golden_Cross, MACD_Bar_Turned_Positive",21.4
-300377,赢时胜,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",20.42
-300445,康斯特,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",17.86
-300192,科德教育,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",17.58
-300218,安利股份,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",17.44
-300092,科新机电,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",16.82
-300174,元力股份,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",16.17
-300328,宜安科技,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",15.59
-300220,金运激光,2,2,"MACD_Golden_Cross, MACD_Bar_Turned_Positive",15.33
-300249,依米康,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",15.12
-300245,天玑科技,2,2,"MACD_Golden_Cross, MACD_Bar_Turned_Positive",14.34
-300406,九强生物,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",13.28
-300275,梅安森,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",12.29
-300319,麦捷科技,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",12.15
-300004,南风股份,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",11.9
-300231,银信科技,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",11.05
-300083,创世纪,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",9.38
-300177,中海达,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",9.26
-300284,苏交科,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",8.63
-300279,和晶科技,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",7.35
-300299,富春股份,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",6.25
-300025,华星创业,2,2,"MACD_Golden_Cross, MACD_Bar_Turned_Positive",6.1
-300160,秀强股份,2,2,"Price_Cross_MA5, MA_5_20_Golden_Cross",5.92
-300057,万顺新材,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",5.89
-300352,北信源,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",5.73
-300310,宜通世纪,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",5.7
-300172,中电环保,2,2,"Price_Cross_MA5, RSI_Rising_Strongly",5.55
-300278,华昌达,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",5.42
-300217,东方电热,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",5.32
-300032,金龙机电,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",4.87
-300292,吴通控股,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",4.57
-300067,安诺其,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",4.51
-300145,南方泵业,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",4.47
-300071,福石控股,2,2,"MACD_Golden_Cross, MACD_Bar_Turned_Positive",4.28
-300355,蒙草生态,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",4.12
-300256,星星科技,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",4.07
-300420,五洋自控,2,2,"KDJ_Oversold_Golden_Cross, Price_Cross_MA5",4.0
-300452,山河药辅,1,1,RSI_Rising_Strongly,13.76
-300434,金石亚药,1,1,RSI_Rising_Strongly,11.73
+股票代码,股票名称,评分,信号数量,信号详情,最新收盘价
+300042,朗科科技,5,5,"MACD金叉, MACD柱转正, KDJ超卖金叉, 价格上穿MA5, RSI强劲上涨",30.54
+300132,青松股份,5,5,"MACD金叉, MACD柱转正, 价格上穿MA5, MA5-MA20金叉, RSI强劲上涨",6.44
+300375,鹏翎股份,5,5,"MACD金叉, MACD柱转正, KDJ超卖金叉, 价格上穿MA5, RSI强劲上涨",5.06
+300142,沃森生物,4,4,"MACD金叉, MACD柱转正, KDJ超卖金叉, 价格上穿MA5",11.49
+300407,凯发电气,4,4,"MACD金叉, MACD柱转正, 价格上穿MA5, RSI强劲上涨",10.91
+300453,三鑫医疗,4,4,"MACD金叉, MACD柱转正, 价格上穿MA5, RSI强劲上涨",9.21
+300169,天晟新材,4,4,"MACD金叉, MACD柱转正, KDJ超卖金叉, 价格上穿MA5",7.05
+300272,开能健康,4,4,"MACD金叉, MACD柱转正, KDJ超卖金叉, 价格上穿MA5",6.52
+300123,亚光科技,4,4,"MACD金叉, MACD柱转正, KDJ超卖金叉, 价格上穿MA5",5.82
+300191,潜能恒信,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",21.26
+300374,中铁装配,3,3,"KDJ超卖金叉, MA5-MA20金叉, RSI强劲上涨",17.14
+300504,天邑股份,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",14.18
+300417,南华仪器,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",13.14
+300497,富祥药业,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",10.54
+300404,博济医药,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",9.98
+300112,万讯自控,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",8.8
+300154,瑞凌股份,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",8.77
+300359,全通教育,3,3,"MACD金叉, MACD柱转正, 价格上穿MA5",5.51
+300234,开尔新材,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",5.48
+300157,新锦动力,3,3,"MACD金叉, MACD柱转正, RSI强劲上涨",4.93
+300094,国联水产,3,3,"MACD金叉, MACD柱转正, 价格上穿MA5",3.63
+300085,银之杰,2,2,"KDJ超卖金叉, 价格上穿MA5",48.57
+300508,维宏股份,2,2,"KDJ超卖金叉, 价格上穿MA5",28.02
+300059,东方财富,2,2,"KDJ超卖金叉, 价格上穿MA5",25.42
+300415,伊之密,2,2,"KDJ超卖金叉, 价格上穿MA5",24.16
+300199,翰宇药业,2,2,"MACD金叉, MACD柱转正",21.4
+300377,赢时胜,2,2,"KDJ超卖金叉, 价格上穿MA5",20.42
+300445,康斯特,2,2,"KDJ超卖金叉, 价格上穿MA5",17.86
+300192,科德教育,2,2,"KDJ超卖金叉, 价格上穿MA5",17.58
+300218,安利股份,2,2,"KDJ超卖金叉, 价格上穿MA5",17.44
+300092,科新机电,2,2,"KDJ超卖金叉, 价格上穿MA5",16.82
+300174,元力股份,2,2,"KDJ超卖金叉, 价格上穿MA5",16.17
+300328,宜安科技,2,2,"KDJ超卖金叉, 价格上穿MA5",15.59
+300220,金运激光,2,2,"MACD金叉, MACD柱转正",15.33
+300249,依米康,2,2,"KDJ超卖金叉, 价格上穿MA5",15.12
+300245,天玑科技,2,2,"MACD金叉, MACD柱转正",14.34
+300406,九强生物,2,2,"KDJ超卖金叉, 价格上穿MA5",13.28
+300275,梅安森,2,2,"KDJ超卖金叉, 价格上穿MA5",12.29
+300319,麦捷科技,2,2,"KDJ超卖金叉, 价格上穿MA5",12.15
+300004,南风股份,2,2,"KDJ超卖金叉, 价格上穿MA5",11.9
+300231,银信科技,2,2,"KDJ超卖金叉, 价格上穿MA5",11.05
+300083,创世纪,2,2,"KDJ超卖金叉, 价格上穿MA5",9.38
+300177,中海达,2,2,"KDJ超卖金叉, 价格上穿MA5",9.26
+300284,苏交科,2,2,"KDJ超卖金叉, 价格上穿MA5",8.63
+300279,和晶科技,2,2,"KDJ超卖金叉, 价格上穿MA5",7.35
+300299,富春股份,2,2,"KDJ超卖金叉, 价格上穿MA5",6.25
+300025,华星创业,2,2,"MACD金叉, MACD柱转正",6.1
+300160,秀强股份,2,2,"价格上穿MA5, MA5-MA20金叉",5.92
+300057,万顺新材,2,2,"KDJ超卖金叉, 价格上穿MA5",5.89
+300352,北信源,2,2,"KDJ超卖金叉, 价格上穿MA5",5.73
+300310,宜通世纪,2,2,"KDJ超卖金叉, 价格上穿MA5",5.7
+300172,中电环保,2,2,"价格上穿MA5, RSI强劲上涨",5.55
+300278,华昌达,2,2,"KDJ超卖金叉, 价格上穿MA5",5.42
+300217,东方电热,2,2,"KDJ超卖金叉, 价格上穿MA5",5.32
+300032,金龙机电,2,2,"KDJ超卖金叉, 价格上穿MA5",4.87
+300292,吴通控股,2,2,"KDJ超卖金叉, 价格上穿MA5",4.57
+300067,安诺其,2,2,"KDJ超卖金叉, 价格上穿MA5",4.51
+300145,南方泵业,2,2,"KDJ超卖金叉, 价格上穿MA5",4.47
+300071,福石控股,2,2,"MACD金叉, MACD柱转正",4.28
+300355,蒙草生态,2,2,"KDJ超卖金叉, 价格上穿MA5",4.12
+300256,星星科技,2,2,"KDJ超卖金叉, 价格上穿MA5",4.07
+300420,五洋自控,2,2,"KDJ超卖金叉, 价格上穿MA5",4.0
+300452,山河药辅,1,1,RSI强劲上涨,13.76
+300434,金石亚药,1,1,RSI强劲上涨,11.73
