@@ -1,8 +1,0 @@
-﻿股票代码,股票名称,买入信号,评分,图表路径
-603238,诺邦股份,RSI值为45.29，处于低位回升阶段; MACD金叉形成,35,results/603238_诺邦股份_analysis.png
-603239,浙江仙通,RSI值为40.77，处于低位回升阶段; KDJ低位金叉,30,results/603239_浙江仙通_analysis.png
-603262,技源集团,RSI值为22.00，股票可能超卖; MACD金叉形成,30,results/603262_技源集团_analysis.png
-603278,大业股份,RSI值为36.68，处于低位回升阶段; KDJ低位金叉,30,results/603278_大业股份_analysis.png
-603289,泰瑞机器,MA金叉形成; MACD金叉形成,40,results/603289_泰瑞机器_analysis.png
-603325,博隆技术,RSI值为31.48，处于低位回升阶段; KDJ低位金叉,30,results/603325_博隆技术_analysis.png
-603466,风语筑,RSI值为28.76，股票可能超卖; MACD金叉形成,30,results/603466_风语筑_analysis.png
