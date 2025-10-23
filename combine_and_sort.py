@@ -6,7 +6,7 @@ import pytz
 
 def combine_and_sort_csvs():
     """
-    读取 results/YYYYMMDD/ 下的所有 CSV 文件，与已存在的合并文件追加、去重、排序，
+    读取 results/ 下的所有 CSV 文件，与已存在的合并文件追加、去重、排序，
     并保存到 combined_results/YYYYMMDD/combined_buy_signals.csv。
     
     该脚本严格遵循用户提供的格式要求：
@@ -22,7 +22,8 @@ def combine_and_sort_csvs():
     date_str = now_shanghai.strftime('%Y%m%d')
     
     # 构造输入目录路径
-    input_dir_pattern = f'results/{date_str}/*.csv'
+    # ***** 修改点: 从 results/{date_str}/*.csv 更改为 results/*.csv *****
+    input_dir_pattern = 'results/*.csv'
     
     # 构造输出目录路径和文件名
     output_dir = f'combined_results/{date_str}'
@@ -36,6 +37,9 @@ def combine_and_sort_csvs():
 
     # --- 1. 读取当天所有新的 CSV 文件 ---
     all_new_files = glob.glob(input_dir_pattern)
+    
+    # 打印实际搜索的路径，帮助用户确认
+    print(f"搜索的输入文件路径模式: {input_dir_pattern}") 
     
     if not all_new_files:
         print(f"在目录 {input_dir_pattern} 中没有找到任何 CSV 文件，跳过本次合并。")
