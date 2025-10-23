@@ -1,4 +1,0 @@
-[2025-10-20 22:12:51.398214] --- Starting Log for Run: 20251020_221251 ---
-[2025-10-20 22:13:07.159227] Error processing 001379.SZ in screening logic: x and y must be the same size
-[2025-10-20 22:13:07.159236] Skipping 001285.SZ: Insufficient data (9 days). Required: 65
-[2025-10-20 22:13:07.159239] Error processing 000692.SZ in screening logic: x and y must be the same size

@@ -1,2 +1,0 @@
-[2025-10-20 22:01:26.578137] --- Starting Log for Run: 20251020_220126 ---
-[2025-10-20 22:01:33.657276] Error processing 002402.SZ in screening logic: x and y must be the same size

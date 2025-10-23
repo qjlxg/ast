@@ -156,9 +156,9 @@ def calculate_technical_indicators(df):
     
     return df
 
-# 分析股票的买入信号 (保持不变)
+# 分析股票的买入信号 (已修改：新增收盘价过滤逻辑)
 def analyze_buy_signals(df, stock_code, stock_name):
-    """分析股票的买入信号"""
+    """分析股票的买入信号，并排除收盘价 >= 10 元的股票"""
     signals = []
     score = 0
     
@@ -169,6 +169,12 @@ def analyze_buy_signals(df, stock_code, stock_name):
     for col in required_cols:
         if col not in df.columns or df[col].isnull().all():
             return {"code": stock_code, "name": stock_name, "signals": ["数据计算错误"], "score": 0}
+            
+    # 【新增功能】：收盘价低于 10 元的股票才进行后续分析
+    current_close = df['收盘'].iloc[-1]
+    if current_close >= 10.0:
+        return {"code": stock_code, "name": stock_name, "signals": [f"收盘价{current_close:.2f}元，高于10元，排除"], "score": 0}
+
     
     try:
         if df['MA5'].iloc[-1] > df['MA20'].iloc[-1] and df['MA5'].iloc[-2] <= df['MA20'].iloc[-2]:
@@ -396,6 +402,7 @@ def main():
         
         result = analyze_single_stock(stock_code, stock_name)
         
+        # 【重要】：只将评分 >= 30 的结果添加到 results 列表中
         if result['score'] >= 30:
             results.append(result)
         
