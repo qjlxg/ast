@@ -1,0 +1,63 @@
+name: Strategy Run on Code or Config Push (推送触发)
+
+on:
+  # 当推送到 main 分支时触发
+  push:
+    branches:
+      - main
+    paths:
+      # 仅当策略脚本或此工作流文件发生变动时才运行
+      - 'breakout_strategy.py'
+      - '.github/workflows/strategy_push_run.yml'
+      # 如果 stock_data 目录内容也经常更新，可能需要加入
+      # - 'stock_data/**'
+  
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  run_strategy:
+    runs-on: ubuntu-latest
+
+    # 设置时区为上海，并配置 Shell 使其使用该时区
+    env:
+      TZ: Asia/Shanghai
+
+    steps:
+    - name: Checkout repository
+      # 检出代码，包括 stock_data 目录
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas
+
+    - name: Get Latest Trading Date (T-1 日)
+      # 确保日期计算在上海时区 (已通过 env: TZ 配置)
+      id: date
+      run: |
+        # 使用 date 命令获取昨天的日期作为策略的买入日 T
+        YESTERDAY=$(date -d "yesterday" +'%Y%m%d')
+        echo "STRATEGY_DATE=${YESTERDAY}" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Run Python Strategy Script
+      # 运行策略脚本，并传递昨天的日期作为参数 (买入日 T)
+      run: python breakout_strategy.py ${{ env.STRATEGY_DATE }}
+
+    - name: Upload Strategy Result (CSV)
+      # 上传策略选股结果文件
+      uses: actions/upload-artifact@v4
+      with:
+        name: buy-signals-${{ env.STRATEGY_DATE }}
+        path: buy_signals.csv
+        retention-days: 7 # 保存 7 天
+
+    - name: Print Results to Action Log
+      run: cat buy_signals.csv
