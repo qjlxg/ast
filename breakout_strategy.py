@@ -2,13 +2,13 @@ import pandas as pd
 import sys
 import os
 from datetime import date, timedelta
-import concurrent.futures # <-- 新增：用于多线程加速
+import concurrent.futures
 
 # --- 配置参数 ---
-DAILY_LIMIT = 0.10 
+DAILY_LIMIT = 0.10 # 涨跌幅限制 (A股主板/中小板 10%)
 LIMIT_TOLERANCE = 0.00005 # 涨停容错，允许 0.005% 的浮点误差
-STOCK_DATA_DIR = 'stock_data' 
-BUY_SIGNAL_FILE = 'buy_signals.csv' 
+STOCK_DATA_DIR = 'stock_data' # 本地股票数据存放目录
+BUY_SIGNAL_FILE = 'buy_signals.csv' # 信号输出文件
 MAX_WORKERS = 8 # 线程池大小，可根据机器核心数调整
 
 # --- 辅助函数：股票过滤与数据加载 ---
@@ -24,7 +24,6 @@ def get_all_stocks_and_filter():
         print(f"!!! 错误: 找不到股票数据目录 '{STOCK_DATA_DIR}'。请创建并放入CSV文件。")
         return []
 
-    # 优雅地处理空目录或权限问题
     try:
         all_files = os.listdir(STOCK_DATA_DIR)
     except OSError as e:
@@ -37,6 +36,7 @@ def get_all_stocks_and_filter():
         if not filename.endswith('.csv'):
             continue
             
+        # 股票代码是文件名中排除后缀的部分 (例如 '603301.csv' -> '603301')
         ts_code = filename.replace('.csv', '')
         
         # 1. 排除 300 开头的创业板股票
@@ -54,7 +54,7 @@ def get_all_stocks_and_filter():
 
 def load_stock_data(ts_code):
     """
-    从本地加载单个股票的 K 线数据，匹配您的 CSV 格式 (日期, 开盘, 收盘, ...)。
+    从本地加载单个股票的 K 线数据，匹配用户提供的 CSV 格式 (日期, 开盘, 收盘, ...)。
     """
     file_path = os.path.join(STOCK_DATA_DIR, f"{ts_code}.csv")
     if not os.path.exists(file_path):
@@ -63,7 +63,7 @@ def load_stock_data(ts_code):
     try:
         df = pd.read_csv(file_path)
         
-        # 1. 重命名列以匹配脚本逻辑
+        # 1. 重命名列以匹配脚本逻辑 (匹配用户提供的 CSV 格式)
         df.rename(columns={
             '日期': 'trade_date', 
             '开盘': 'open', 
@@ -74,10 +74,9 @@ def load_stock_data(ts_code):
         
         required_cols = ['trade_date', 'open', 'close', 'high', 'low']
         if not all(col in df.columns for col in required_cols):
-            print(f"!!! {ts_code} 数据缺失关键列，跳过。")
             return None
         
-        # 2. 确保日期列是 datetime 对象，并设置为索引
+        # 2. 确保日期列是 datetime 对象，并设置为索引 (假设日期格式是 YYYY-MM-DD)
         df['trade_date'] = pd.to_datetime(df['trade_date'])
         df = df.set_index('trade_date').sort_index()
         
@@ -89,7 +88,6 @@ def load_stock_data(ts_code):
         
         return df
     except Exception as e:
-        # print(f"!!! 无法加载或处理 {ts_code} 的数据: {e}")
         return None
 
 # --- 辅助函数：策略逻辑判断 ---
@@ -97,6 +95,7 @@ def load_stock_data(ts_code):
 def is_small_positive_line(row, pre_close):
     """
     判断是否为“小阳线”且涨跌幅在 [0.5%, 3%] 内。
+    注意：在 check_consolidation_criteria 中已不再强制要求此条件。
     """
     change_pct = (row['close'] / pre_close - 1)
     
@@ -106,6 +105,7 @@ def is_small_positive_line(row, pre_close):
 def check_consolidation_criteria(df_kline):
     """
     检查涨停后的3天整理K线是否符合条件。
+    - 修正：不再强制要求三天均为小阳线，只保留核心的整理范围判断。
     """
     if len(df_kline) < 4:
         return False, "数据不足4天"
@@ -113,11 +113,10 @@ def check_consolidation_criteria(df_kline):
     limit_day = df_kline.iloc[0] # 涨停日 (T-4)
     consolidation_days = df_kline.iloc[1:4] # 整理 3 天 (T-3, T-2, T-1)
     
-    # --- 1. 确认第一天是否为涨停 (加入容错) ---
+    # --- 1. 确认第一天是否为涨停 (容错) ---
     limit_price = limit_day['close']
-    
     change_pct = (limit_day['close'] / limit_day['pre_close'] - 1)
-    min_limit_pct = DAILY_LIMIT - LIMIT_TOLERANCE # 使用容错值
+    min_limit_pct = DAILY_LIMIT - LIMIT_TOLERANCE 
     
     is_limit_hit = change_pct >= min_limit_pct
     
@@ -126,22 +125,23 @@ def check_consolidation_criteria(df_kline):
 
     # --- 2. 整理不破涨停价 (整理日最低价 >= 涨停价) ---
     if (consolidation_days['low'] < limit_price).any():
-        return False, "整理期最低价跌破涨停价"
+        # 输出详细信息帮助调试
+        failed_day_index = (consolidation_days['low'] < limit_price).idxmax()
+        failed_low = consolidation_days.loc[failed_day_index, 'low']
+        return False, f"整理期最低价跌破涨停价: {failed_day_index.strftime('%Y%m%d')} 跌至 {failed_low:.2f} (涨停价 {limit_price:.2f})"
 
-    # --- 3. 每天涨跌幅±3%内优选 & 4. 3天均为小阳线优选 ---
+    # --- 3. 每天涨跌幅±3%内 (核心整理要求) ---
     pre_close = limit_price 
     for i in range(len(consolidation_days)):
         row = consolidation_days.iloc[i]
         
-        # 3. 检查涨跌幅±3%内 (相对前一交易日收盘价)
+        # 检查涨跌幅±3%内 (相对前一交易日收盘价)
         current_change_pct = (row['close'] / pre_close) - 1
         if not (-0.03 <= current_change_pct <= 0.03):
-            return False, f"第{i+1}天涨跌幅不在±3%内"
+            return False, f"第{i+1}天涨跌幅不在±3%内 (实际涨幅: {current_change_pct:.4f})"
         
-        # 4. 检查小阳线 
-        if not is_small_positive_line(row, pre_close):
-            return False, f"第{i+1}天不符合小阳线条件"
-            
+        # 4. 移除对小阳线的强制要求 (原图为“优选”)
+        # pre_close 已经在循环体前面更新
         pre_close = row['close']
 
     return True, "符合买入条件"
@@ -150,27 +150,27 @@ def check_consolidation_criteria(df_kline):
 
 def process_stock(ts_code, trade_date_dt, trade_date_str):
     """
-    单个股票的处理逻辑，用于线程池。
+    单个股票的处理逻辑，用于线程池。返回 (信号, 原因)
     """
     df_kline = load_stock_data(ts_code)
     
     if df_kline is None or df_kline.empty:
-        return None
+        return None, f"数据加载失败或为空: {ts_code}"
         
     df_recent = df_kline[df_kline.index <= trade_date_dt]
     
-    # 这里的 tail(4) 解决了非交易日问题，它只取数据中存在的最后 4 个交易日
+    # tail(4) 解决非交易日问题，只取数据中存在的最后 4 个交易日
     recent_4_days = df_recent.tail(4) 
     
     if len(recent_4_days) < 4:
-        return None
+        return None, f"历史数据不足4天: {ts_code}"
         
     is_buy, reason = check_consolidation_criteria(recent_4_days)
     
     if is_buy:
-        return {'code': ts_code, 'buy_date': trade_date_str}
+        return {'code': ts_code, 'buy_date': trade_date_str}, "符合买入条件"
         
-    return None
+    return None, f"{ts_code} - 排除原因: {reason}"
 
 # --- 核心函数：策略执行 ---
 
@@ -188,36 +188,41 @@ def run_strategy(trade_date_str):
         return
 
     buy_signals = []
+    failure_logs = [] 
     trade_date_dt = pd.to_datetime(trade_date_str, format='%Y%m%d')
     
     print(f"\n>>> 开始使用 {MAX_WORKERS} 线程检查 {len(all_filtered_stocks)} 只股票的整理形态...")
     
-    # 使用 ThreadPoolExecutor 实现多线程并行处理
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        # 提交所有股票任务
         future_to_stock = {
             executor.submit(process_stock, ts_code, trade_date_dt, trade_date_str): ts_code 
             for ts_code in all_filtered_stocks
         }
         
-        # 收集结果
         for future in concurrent.futures.as_completed(future_to_stock):
-            result = future.result()
-            if result:
-                buy_signals.append(result)
+            signal, reason = future.result() 
+            if signal:
+                buy_signals.append(signal)
+            else:
+                failure_logs.append(reason)
                 
     # 最终输出
     print("\n--- 最终买入列表 (T日执行) ---")
     if buy_signals:
         result_df = pd.DataFrame(buy_signals)
         print(result_df.to_markdown(index=False))
-        # 保存结果到文件
         result_df.to_csv(BUY_SIGNAL_FILE, index=False)
     else:
         print("今日无符合条件的买入信号。")
-        # 创建空文件
         with open(BUY_SIGNAL_FILE, 'w') as f:
              f.write("code,buy_date\n")
+
+    # 打印失败日志 (帮助用户调试)
+    print("\n--- 股票排除原因日志 (前20条) ---")
+    for log in failure_logs[:20]: 
+        print(log)
+    if len(failure_logs) > 20:
+        print(f"... 共 {len(failure_logs)} 个排除日志，仅显示前 20 条。")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
