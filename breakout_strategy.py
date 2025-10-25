@@ -28,9 +28,7 @@ def get_all_stocks_and_filter():
         if not filename.endswith('.csv'):
             continue
             
-        # 股票代码是文件名中排除后缀的部分 (如 '603301.csv' -> '603301')
-        # 注意: 您的文件名中没有包含交易所后缀 (.SH/.SZ)，如果需要精确过滤，
-        # 建议在文件名中包含交易所后缀。
+        # 股票代码是文件名中排除后缀的部分 (例如 '603301.csv' -> '603301')
         ts_code = filename.replace('.csv', '')
         
         # 1. 排除 300 开头的创业板股票
@@ -38,7 +36,7 @@ def get_all_stocks_and_filter():
             print(f"--- 排除创业板股票: {ts_code}")
             continue 
             
-        # 2. 排除 ST/*ST 股票 (基于文件名，如果文件名不包含，需要外部列表)
+        # 2. 排除 ST/*ST 股票 (基于文件名)
         if 'ST' in ts_code.upper(): 
             print(f"--- 排除 ST 股票: {ts_code}")
             continue
@@ -50,8 +48,8 @@ def get_all_stocks_and_filter():
 
 def load_stock_data(ts_code):
     """
-    从本地加载单个股票的 K 线数据，并匹配您的 CSV 格式。
-    CSV 列名: date, open, close, high, low, volume
+    从本地加载单个股票的 K 线数据，匹配用户提供的 CSV 格式。
+    原始列名: 日期, 股票代码, 开盘, 收盘, 最高, 最低, ...
     """
     file_path = os.path.join(STOCK_DATA_DIR, f"{ts_code}.csv")
     if not os.path.exists(file_path):
@@ -60,18 +58,30 @@ def load_stock_data(ts_code):
     try:
         df = pd.read_csv(file_path)
         
-        # 1. 重命名 'date' 列为 'trade_date'
-        df.rename(columns={'date': 'trade_date'}, inplace=True)
+        # 1. 重命名列以匹配脚本逻辑
+        df.rename(columns={
+            '日期': 'trade_date', 
+            '开盘': 'open', 
+            '收盘': 'close', 
+            '最高': 'high', 
+            '最低': 'low'
+        }, inplace=True)
         
-        # 2. 确保日期列是 datetime 对象，并设置为索引
-        # 假设日期格式是 YYYYMMDD 或 YYYY-MM-DD，这里尝试自动推断
+        # 2. 确保关键列存在
+        required_cols = ['trade_date', 'open', 'close', 'high', 'low']
+        if not all(col in df.columns for col in required_cols):
+            print(f"!!! {ts_code} 数据缺失关键列，跳过。")
+            return None
+        
+        # 3. 确保日期列是 datetime 对象，并设置为索引
+        # 假设日期格式是 YYYY-MM-DD
         df['trade_date'] = pd.to_datetime(df['trade_date'])
         df = df.set_index('trade_date').sort_index()
         
-        # 3. 手动计算 'pre_close' (前收盘价)
+        # 4. 手动计算 'pre_close' (前收盘价)
         df['pre_close'] = df['close'].shift(1)
         
-        # 4. 删除缺失前收盘价的第一行
+        # 5. 删除缺失前收盘价的第一行
         df = df.dropna(subset=['pre_close'])
         
         return df
@@ -103,6 +113,7 @@ def check_consolidation_criteria(df_kline):
     
     # --- 1. 确认第一天是否为涨停 ---
     limit_price = limit_day['close']
+    # 使用前收盘价计算涨幅
     is_limit_hit = (limit_day['close'] / limit_day['pre_close'] - 1) >= DAILY_LIMIT - 0.0001
     if not is_limit_hit:
         return False, "第一天非涨停"
@@ -129,13 +140,11 @@ def check_consolidation_criteria(df_kline):
 
     return True, "符合买入条件"
 
-# --- 核心函数：策略执行 ---
+# --- 核心函数：策略执行 (与之前版本相同) ---
 
 def run_strategy(trade_date_str):
     """
     执行策略主函数。trade_date_str 是买入日（T日，即图片中的“第4天”）。
-    
-    :param trade_date_str: 运行策略的日期 (YYYYMMDD)
     """
     print(f"\n--- 策略运行日期 (买入日 T): {trade_date_str} ---")
     
