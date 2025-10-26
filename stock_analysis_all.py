@@ -16,7 +16,7 @@ try:
     if os.path.exists(font_path):
         fontprop = FontProperties(fname=font_path)
         # 【关键修复】：将字体系列设置为全局参数 (解决 Line2D.set() 错误)
-        matplotlib.rcParams['font.family'] = fontprop.get_name()
+        matplotlib.rcParams['font.family'] = fontprop.get_name() 
         # 仅为文本元素（如标题、图例）保留 fontproperties
         chinese_font = {'fontproperties': fontprop}
         print("中文字体加载成功。")
@@ -25,7 +25,7 @@ try:
         matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Zen Hei', 'Arial Unicode MS']
         chinese_font = {'family': 'sans-serif'}
         print("警告: 无法找到指定中文字体，已尝试设置备用字体。")
-
+        
     matplotlib.rcParams['axes.unicode_minus'] = False
 except Exception as e:
     print(f"致命警告: 字体配置失败: {e}，将使用 Matplotlib 默认字体。")
@@ -35,7 +35,8 @@ except Exception as e:
 # 定义常量
 DATA_DIR = 'stock_data'
 RESULTS_DIR = 'results'
-PROGRESS_FILE = 'progress.txt'
+PROGRESS_FILE = 'progress.txt' 
+LAST_RUN_DATE_FILE = 'last_run_date.txt' # 【新增】：上次运行日期文件
 
 # 创建结果保存目录和数据保存目录
 if not os.path.exists(RESULTS_DIR):
@@ -58,18 +59,18 @@ def save_and_update_stock_data(stock_code, max_retries=5):
     返回包含最新数据的 DataFrame。
     """
     file_path = os.path.join(DATA_DIR, f"{stock_code}.csv")
-
+    
     start_date_str = "19900101"
     existing_df = pd.DataFrame()
-
+    
     if os.path.exists(file_path):
         try:
             existing_df = pd.read_csv(file_path, parse_dates=['日期'])
             existing_df.sort_values(by='日期', inplace=True)
-
+            
             last_date_obj = existing_df['日期'].iloc[-1]
             last_date_str = last_date_obj.strftime('%Y%m%d')
-
+            
             today_str = datetime.now().strftime('%Y%m%d')
             if last_date_str == today_str:
                  return existing_df
@@ -79,35 +80,35 @@ def save_and_update_stock_data(stock_code, max_retries=5):
 
         except Exception as e:
             print(f"警告: 读取 {stock_code}.csv 失败 ({e})，将尝试重新下载全部数据。")
-
+            
     for attempt in range(max_retries):
         try:
             new_data_df = ak.stock_zh_a_hist(
-                symbol=stock_code,
-                period="daily",
-                start_date=start_date_str,
-                end_date=datetime.now().strftime('%Y%m%d'),
+                symbol=stock_code, 
+                period="daily", 
+                start_date=start_date_str, 
+                end_date=datetime.now().strftime('%Y%m%d'), 
                 adjust="qfq"
             )
-
+            
             if new_data_df.empty:
                 return existing_df
-
+            
             new_data_df['日期'] = pd.to_datetime(new_data_df['日期'])
             new_data_df.sort_values(by='日期', inplace=True)
-
+            
             if existing_df.empty or start_date_str == "19900101":
                 new_data_df.to_csv(file_path, index=False, encoding='utf-8')
                 return new_data_df
             else:
                 new_data_df = new_data_df[new_data_df['日期'] > existing_df['日期'].iloc[-1]]
-
+                
                 if not new_data_df.empty:
                     new_data_df.to_csv(file_path, mode='a', header=False, index=False, encoding='utf-8')
                     return pd.concat([existing_df, new_data_df], ignore_index=True)
                 else:
                     return existing_df
-
+            
         except Exception as e:
             error_message = f"下载或更新 {stock_code} 数据失败: {e}"
             if "Remote end closed connection" in str(e) or "Connection aborted" in str(e):
@@ -121,7 +122,7 @@ def save_and_update_stock_data(stock_code, max_retries=5):
                 print(f"致命错误: {error_message}")
                 return existing_df
 
-    return existing_df
+    return existing_df 
 
 # 计算技术指标 (保持不变)
 def calculate_technical_indicators(df):
@@ -129,31 +130,31 @@ def calculate_technical_indicators(df):
     for col in ['开盘', '收盘', '最高', '最低', '成交量']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
-
+    
     df['MA5'] = df['收盘'].rolling(window=5).mean()
     df['MA10'] = df['收盘'].rolling(window=10).mean()
     df['MA20'] = df['收盘'].rolling(window=20).mean()
     df['MA60'] = df['收盘'].rolling(window=60).mean()
-
+    
     delta = df['收盘'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
-
+    
     df['EMA12'] = df['收盘'].ewm(span=12, adjust=False).mean()
     df['EMA26'] = df['收盘'].ewm(span=26, adjust=False).mean()
     df['DIF'] = df['EMA12'] - df['EMA26']
     df['DEA'] = df['DIF'].ewm(span=9, adjust=False).mean()
     df['MACD'] = 2 * (df['DIF'] - df['DEA'])
-
+    
     low_min = df['最低'].rolling(window=9).min()
     high_max = df['最高'].rolling(window=9).max()
     df['RSV'] = 100 * ((df['收盘'] - low_min) / (high_max - low_min + 1e-9))
     df['K'] = df['RSV'].ewm(com=2, adjust=False).mean()
     df['D'] = df['K'].ewm(com=2, adjust=False).mean()
     df['J'] = 3 * df['K'] - 2 * df['D']
-
+    
     return df
 
 # 分析股票的买入信号 (已修改：新增收盘价过滤逻辑)
@@ -161,26 +162,26 @@ def analyze_buy_signals(df, stock_code, stock_name):
     """分析股票的买入信号，并排除收盘价 >= 10 元的股票"""
     signals = []
     score = 0
-
+    
     if len(df) < 60:
         return {"code": stock_code, "name": stock_name, "signals": ["数据不足"], "score": 0}
-
+    
     required_cols = ['收盘', 'MA5', 'MA20', 'RSI', 'MACD', 'DIF', 'DEA', 'K', 'D', 'J']
     for col in required_cols:
         if col not in df.columns or df[col].isnull().all():
             return {"code": stock_code, "name": stock_name, "signals": ["数据计算错误"], "score": 0}
-
+            
     # 【新增功能】：收盘价低于 10 元的股票才进行后续分析
     current_close = df['收盘'].iloc[-1]
     if current_close >= 10.0:
         return {"code": stock_code, "name": stock_name, "signals": [f"收盘价{current_close:.2f}元，高于10元，排除"], "score": 0}
 
-
+    
     try:
         if df['MA5'].iloc[-1] > df['MA20'].iloc[-1] and df['MA5'].iloc[-2] <= df['MA20'].iloc[-2]:
             signals.append("MA金叉形成")
             score += 20
-
+        
         current_rsi = df['RSI'].iloc[-1]
         if 30 <= current_rsi <= 50:
             signals.append(f"RSI值为{current_rsi:.2f}，处于低位回升阶段")
@@ -188,11 +189,11 @@ def analyze_buy_signals(df, stock_code, stock_name):
         elif current_rsi < 30:
             signals.append(f"RSI值为{current_rsi:.2f}，股票可能超卖")
             score += 10
-
+        
         if df['DIF'].iloc[-1] > df['DEA'].iloc[-1] and df['DIF'].iloc[-2] <= df['DEA'].iloc[-2]:
             signals.append("MACD金叉形成")
             score += 20
-
+        
         if df['K'].iloc[-1] > df['D'].iloc[-1] and df['K'].iloc[-2] <= df['D'].iloc[-2]:
             if df['K'].iloc[-1] < 50:
                 signals.append("KDJ低位金叉")
@@ -200,24 +201,24 @@ def analyze_buy_signals(df, stock_code, stock_name):
             else:
                 signals.append("KDJ金叉")
                 score += 10
-
+        
         avg_volume = df['成交量'].iloc[-6:-1].mean()
         current_volume = df['成交量'].iloc[-1]
         price_change = (df['收盘'].iloc[-1] / df['收盘'].iloc[-2] - 1) * 100
-
+        
         if current_volume > 1.5 * avg_volume and price_change > 0:
             signals.append(f"放量上涨: 量比{current_volume/avg_volume:.2f}, 涨幅{price_change:.2f}%")
             score += 15
-
+        
         recent_high = df['最高'].iloc[-20:-1].max()
         if df['收盘'].iloc[-1] > recent_high:
             signals.append("突破20日前高")
             score += 15
-
+            
     except Exception as e:
         signals.append(f"分析过程出错: {str(e)}")
         score = 0
-
+    
     return {
         "code": stock_code,
         "name": stock_name,
@@ -230,7 +231,7 @@ def analyze_single_stock(stock_code, stock_name):
     """从本地文件加载或更新数据，并进行分析"""
     try:
         df = save_and_update_stock_data(stock_code)
-
+        
         if df.empty:
             return {
                 "code": stock_code,
@@ -241,12 +242,12 @@ def analyze_single_stock(stock_code, stock_name):
 
         df = calculate_technical_indicators(df)
         result = analyze_buy_signals(df, stock_code, stock_name)
-
+        
         if result['score'] >= 30:
             save_analysis_chart(df, stock_code, stock_name, result)
-
+        
         return result
-
+    
     except Exception as e:
         return {
             "code": stock_code,
@@ -261,44 +262,44 @@ def save_analysis_chart(df, stock_code, stock_name, result):
     global fontprop
     try:
         plt.figure(figsize=(15, 12))
-
+        
         plt.subplot(3, 1, 1)
         if df.index.name != '日期' and '日期' in df.columns:
-            df = df.set_index('日期')
-
+            df = df.set_index('日期') 
+            
         df_plot = df.iloc[-60:]
-
+            
         # 移除 plt.plot 中的字体参数
         plt.plot(df_plot.index, df_plot['收盘'], label='收盘价')
         plt.plot(df_plot.index, df_plot['MA5'], label='MA5')
         plt.plot(df_plot.index, df_plot['MA20'], label='MA20')
         plt.plot(df_plot.index, df_plot['MA60'], label='MA60')
-
+        
         plt.title(f'{stock_code} {stock_name} - 股价走势与技术指标', **chinese_font)
-
+        
         # 【最终修复】：将 plt.legend(**chinese_font) 替换为 prop=fontprop
         if fontprop:
             plt.legend(prop=fontprop)
         else:
             plt.legend()
-
+            
         plt.grid(True)
-
+        
         plt.subplot(3, 1, 2)
         # 移除 plt.plot/plt.bar 中的字体参数
         plt.plot(df_plot.index, df_plot['DIF'], label='DIF')
         plt.plot(df_plot.index, df_plot['DEA'], label='DEA')
         plt.bar(df_plot.index, df_plot['MACD'], label='MACD', color=['r' if x > 0 else 'g' for x in df_plot['MACD']])
         plt.title('MACD指标', **chinese_font)
-
+        
         # 【最终修复】：将 plt.legend(**chinese_font) 替换为 prop=fontprop
         if fontprop:
             plt.legend(prop=fontprop)
         else:
             plt.legend()
-
+            
         plt.grid(True)
-
+        
         plt.subplot(3, 1, 3)
         # 移除 plt.plot 中的字体参数
         plt.plot(df_plot.index, df_plot['K'], label='K')
@@ -308,20 +309,20 @@ def save_analysis_chart(df, stock_code, stock_name, result):
         plt.axhline(y=80, color='r', linestyle='--')
         plt.axhline(y=20, color='g', linestyle='--')
         plt.title('KDJ与RSI指标', **chinese_font)
-
+        
         # 【最终修复】：将 plt.legend(**chinese_font) 替换为 prop=fontprop
         if fontprop:
             plt.legend(prop=fontprop)
         else:
             plt.legend()
-
+            
         plt.grid(True)
-
+        
         plt.tight_layout()
         file_path = f'{RESULTS_DIR}/{stock_code}_{stock_name}_analysis.png'
         plt.savefig(file_path)
         plt.close()
-
+        
         result['chart_path'] = file_path
     except Exception as e:
         # 打印详细的错误信息
@@ -332,53 +333,69 @@ def save_analysis_chart(df, stock_code, stock_name, result):
 # 主函数
 def main():
     # ----------------------------------------
-    # 1. 检查和加载进度
+    # 1. 检查和加载进度 (【修改】: 增加日期判断机制)
     # ----------------------------------------
     start_index = 0
-    if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, 'r') as f:
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    
+    # 检查上次运行日期
+    last_run_date = None
+    if os.path.exists(LAST_RUN_DATE_FILE):
+        with open(LAST_RUN_DATE_FILE, 'r') as f:
             try:
-                start_index = int(f.read().strip())
-                print(f"检测到上次进度，将从第 {start_index + 1} 只股票开始分析。")
-            except ValueError:
-                os.remove(PROGRESS_FILE)
-                print("进度文件损坏，将从头开始分析。")
-                start_index = 0
+                last_run_date = f.read().strip()
+            except:
+                pass
+
+    # 判断是否应重置进度：如果上次运行日期不是今天
+    if last_run_date != today_str:
+        print("检测到非今日运行记录，或日期文件缺失，重置进度为从头开始，以确保全部数据更新。")
+        if os.path.exists(PROGRESS_FILE):
+             os.remove(PROGRESS_FILE)
+        start_index = 0
+    else:
+        # 如果是今天运行的，尝试加载进度文件
+        if os.path.exists(PROGRESS_FILE):
+            with open(PROGRESS_FILE, 'r') as f:
+                try:
+                    start_index = int(f.read().strip())
+                    print(f"检测到今日运行进度，将从第 {start_index + 1} 只股票开始分析。")
+                except ValueError:
+                    os.remove(PROGRESS_FILE)
+                    print("进度文件损坏，将从头开始分析。")
+                    start_index = 0
 
     stock_list = get_stock_list()
-
+    
     # 确保列名标准化
     is_renamed = False
     col_mapping = {
-        'code': '代码', 'name': '名称',
+        'code': '代码', 'name': '名称', 
         'symbol': '代码'
     }
     for old, new in col_mapping.items():
         if old in stock_list.columns and new not in stock_list.columns:
             stock_list = stock_list.rename(columns={old: new}, inplace=False)
             is_renamed = True
-
+    
     if '代码' not in stock_list.columns or '名称' not in stock_list.columns:
         print("致命错误：无法识别股票列表中的股票代码或名称列名。")
         print("当前的列名是：", stock_list.columns.tolist())
         return
-
+    
     if is_renamed:
         print("成功重命名股票列表列名以匹配脚本逻辑。")
-
+        
     # ----------------------------------------
-    # 2. 排除 ST 股票 和 创业板股票
+    # 2. 排除 ST 股票 和 创业板股票 (保持不变)
     # ----------------------------------------
     initial_count = len(stock_list)
     
     # 排除名称中含有 *ST, ST 或 退 的股票
     stock_list = stock_list[~stock_list['名称'].str.lower().str.contains(r'[s\*]t|退', na=False)]
     
-    # 【新增逻辑】：排除创业板股票（代码以 '300' 开头）
-    # 确保 '代码' 列是字符串类型，以便使用 str.startswith()
+    # 【原有新增逻辑】：排除创业板股票（代码以 '300' 开头）
     stock_list['代码'] = stock_list['代码'].astype(str)
-    
-    # 统计被排除的创业板股票数量
     initial_after_st_count = len(stock_list)
     stock_list = stock_list[~stock_list['代码'].str.startswith('300')]
     excluded_gem_count = initial_after_st_count - len(stock_list)
@@ -387,44 +404,48 @@ def main():
     print(f"已排除 {excluded_gem_count} 只 创业板 (300开头) 股票。")
 
     total_stocks = len(stock_list)
-
+    
     # ----------------------------------------
-    # 3. 设置分段处理范围
+    # 3. 设置分段处理范围 (保持不变)
     # ----------------------------------------
     BATCH_SIZE = 100  # <-- 调试限制：批次大小为 100
-
+    
     END_INDEX = min(start_index + BATCH_SIZE, total_stocks)
-
+    
     if start_index >= total_stocks:
         print("所有股票已分析完毕。任务结束。")
+        # 确保完成时清理进度文件
         if os.path.exists(PROGRESS_FILE):
              os.remove(PROGRESS_FILE)
+        # 确保完成时更新日期文件
+        with open(LAST_RUN_DATE_FILE, 'w') as f:
+            f.write(today_str)
         return
 
     print(f"共获取到 {total_stocks} 只股票 (排除ST和创业板后)")
     print(f"本次任务范围: 分析 {start_index + 1} 到 {END_INDEX} 只股票。")
-
+    
     current_batch = stock_list.iloc[start_index:END_INDEX]
-
+    
     results = []
-
+    
     for idx, row in tqdm(current_batch.iterrows(), total=len(current_batch), desc="分析进度"):
         stock_code = row['代码']
         stock_name = row['名称']
-
+        
         result = analyze_single_stock(stock_code, stock_name)
-
+        
         # 【重要】：只将评分 >= 30 的结果添加到 results 列表中
         if result['score'] >= 30:
             results.append(result)
-
+        
         # 脚本内部的请求间隔
         time.sleep(5.8)
-
+    
     # ----------------------------------------
-    # 4. 结果处理和进度保存
+    # 4. 结果处理和进度保存 (【修改】: 增加日期文件保存)
     # ----------------------------------------
-
+    
     if results:
         csv_data = []
         for result in results:
@@ -437,21 +458,25 @@ def main():
                 '图表路径': result.get('chart_path', '')
             }
             csv_data.append(row)
-
+        
         df_result = pd.DataFrame(csv_data)
         df_result.to_csv(f'{RESULTS_DIR}/buy_signals_{start_index}_to_{END_INDEX}.csv', index=False, encoding='utf-8-sig')
         print(f"批次结果已保存到 {RESULTS_DIR}/buy_signals_{start_index}_to_{END_INDEX}.csv")
 
-
+    
     next_start_index = END_INDEX
-
+    
+    # 【新增】：无论是否完成，都记录本次运行的日期
+    with open(LAST_RUN_DATE_FILE, 'w') as f:
+        f.write(today_str)
+    
     if next_start_index < total_stocks:
         with open(PROGRESS_FILE, 'w') as f:
             f.write(str(next_start_index))
         print(f"本次任务完成。进度已保存，下次将从 {next_start_index + 1} 只股票继续。")
-
+        
         # 退出码 99 通知工作流重启
-        exit(99)
+        exit(99) 
     else:
         if os.path.exists(PROGRESS_FILE):
              os.remove(PROGRESS_FILE)
