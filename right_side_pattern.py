@@ -1,183 +1,275 @@
-# -*- coding: utf-8 -*-
 import os
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 from multiprocessing import Pool, cpu_count
 import numpy as np
-from typing import List, Optional, Dict
-import logging
 
-# ---------- 日志 ----------
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)-8s] %(message)s',
-    datefmt='%H:%M:%S'
-)
-log = logging.getLogger(__name__)
+# --- 配置 ---
+INPUT_DIR = "stock_data"  # 股票历史数据目录
+BUY_SIGNALS_BASE_DIR = "buy_signals"  # 信号文件基础目录
+OUTPUT_DIR = "results"
+TIMEZONE = "Asia/Shanghai"  # 上海时区
+# 使用 CPU 核心数减 1 进行并行处理，提高效率
+NUM_PROCESSES = max(1, cpu_count() - 1) 
 
-# ---------- 配置 ----------
-INPUT_DIR            = "stock_data"               # 历史日线
-BUY_SIGNALS_BASE_DIR = "buy_signals"               # 信号文件根目录
-OUTPUT_DIR           = "results"
-TIMEZONE             = "Asia/Shanghai"
-NUM_PROCESSES        = max(1, cpu_count() - 1)
+# --- 请注意：以下变量需要根据您实际的 CSV 文件列名进行调整 ---
+# 假设您的 buy_signals CSV 文件中股票代码的列名是 '股票代码'
+# 如果不是，请修改此处的 '股票代码'
+STOCK_CODE_COLUMN_NAME = '股票代码' 
 
-# ---------- 指标 ----------
-def calc_macd(df: pd.DataFrame) -> pd.DataFrame:
-    df['EMA12'] = df['收盘'].ewm(span=12, adjust=False).mean()
-    df['EMA26'] = df['收盘'].ewm(span=26, adjust=False).mean()
-    df['DIF']   = df['EMA12'] - df['EMA26']
-    df['DEA']   = df['DIF'].ewm(span=9, adjust=False).mean()
+# --- 技术指标计算函数 ---
+def calculate_macd(df, short_period=12, long_period=26, signal_period=9):
+    """计算 MACD 指标 (DIF, DEA)"""
+    df['EMA_short'] = df['收盘'].ewm(span=short_period, adjust=False).mean()
+    df['EMA_long'] = df['收盘'].ewm(span=long_period, adjust=False).mean()
+    df['DIF'] = df['EMA_short'] - df['EMA_long']
+    df['DEA'] = df['DIF'].ewm(span=signal_period, adjust=False).mean()
     return df
 
-def calc_kdj(df: pd.DataFrame, n=9, k_p=3, d_p=3) -> pd.DataFrame:
-    low  = df['最低'].rolling(n, min_periods=1).min()
-    high = df['最高'].rolling(n, min_periods=1).max()
-    rsv  = (df['收盘'] - low) / (high - low).replace(0, np.nan) * 100
-    rsv  = rsv.fillna(50)
+def calculate_kdj(df, n=9, m1=3, m2=3):
+    """计算 KDJ 指标 (RSV, K, D, J)"""
+    low_list = df['最低'].rolling(window=n).min()
+    high_list = df['最高'].rolling(window=n).max()
+    
+    range_diff = high_list - low_list
+    # 使用 replace(0, np.nan) 避免除以零
+    df['RSV'] = (df['收盘'] - low_list).div(range_diff.replace(0, np.nan)) * 100
+    df['RSV'] = df['RSV'].fillna(100) 
 
-    df['K'] = rsv.ewm(alpha=1/k_p, adjust=False).mean()
-    df['D'] = df['K'].ewm(alpha=1/d_p, adjust=False).mean()
-    df['J'] = 3*df['K'] - 2*df['D']
+    df['K'] = df['RSV'].ewm(com=m1 - 1, adjust=False).mean()
+    df['D'] = df['K'].ewm(com=m2 - 1, adjust=False).mean()
+    df['J'] = 3 * df['K'] - 2 * df['D']
     return df
 
-# ---------- 数据清洗 ----------
-def preprocess(df: pd.DataFrame) -> pd.DataFrame:
-    df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
-    df = df.dropna(subset=['日期']).sort_values('日期').reset_index(drop=True)
-    for c in ['开盘','收盘','最高','最低','成交量']:
-        df[c] = pd.to_numeric(df[c], errors='coerce')
-    return df.dropna(subset=['开盘','收盘','最高','最低','成交量'])
+# --- 数据预处理 ---
+def preprocess_stock(df):
+    """将关键列转换为数值类型，并按日期排序"""
+    
+    # 转换为日期格式并排序
+    df['日期'] = pd.to_datetime(df['日期'])
+    df = df.sort_values(by='日期').reset_index(drop=True)
+    
+    # 确保价格和成交量为数字
+    price_volume_cols = ['开盘', '收盘', '最高', '最低', '成交量']
+    for col in price_volume_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    # 丢弃 NaN 行
+    df = df.dropna(subset=price_volume_cols)
+    
+    return df
 
-# ---------- 单只股票筛选 ----------
-def process(stock_code: str) -> Optional[Dict]:
-    fp = os.path.join(INPUT_DIR, f"{stock_code}.csv")
-    if not os.path.exists(fp):
+# --- 核心筛选逻辑 (包含实盘过滤) ---
+def process_stock_file(stock_code):
+    """处理单个股票代码，计算指标并检查增强版右侧模式"""
+    filename = f"{stock_code}.csv"
+    filepath = os.path.join(INPUT_DIR, filename)
+    
+    # 检查股票数据文件是否存在
+    if not os.path.exists(filepath):
         return None
-
+        
     try:
-        df = pd.read_csv(fp)
-        if len(df) < 30: return None
-        df = preprocess(df)
-        df = calc_macd(df)
-        df = calc_kdj(df)
-        df['20D_Max'] = df['收盘'].rolling(20, min_periods=20).max()
+        df = pd.read_csv(filepath)
+        
+        df = preprocess_stock(df)
+        
+        # 1. 数据充足性检查 (至少需要 30 天数据)
+        if len(df) < 30:
+            return None 
 
-        cur = df.iloc[-1]
-        pre = df.iloc[-2]
+        df = calculate_macd(df)
+        df = calculate_kdj(df)
+        
+        # 滚动计算 20 日收盘价最大值
+        df['20D_Max'] = df['收盘'].rolling(window=20).max()
+        
+        # 获取最后两天的数据
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
 
-        # 实盘过滤
-        if cur['成交量'] <= 100 or pre['收盘'] <= 0: return None
-        chg = cur['收盘']/pre['收盘'] - 1
-        if abs(chg) >= 0.095: return None
-        if pd.isna(df['20D_Max'].iloc[-2]): return None
+        # 2. 确保前一天的 20D_Max 存在 (即至少有 20 天数据用于计算)
+        if pd.isna(df['20D_Max'].iloc[-2]): 
+             return None 
+        
+        # --- 涨跌停/停牌过滤 (实盘必备) ---
+        
+        # A. 停牌过滤 (成交量 <= 0)
+        if latest['成交量'] <= 0:
+            return None
+        
+        # B. 涨跌停过滤
+        if prev['收盘'] <= 0:
+            return None
+            
+        daily_change = (latest['收盘'] / prev['收盘'] - 1)
+        
+        # 跳过涨停板 (>= 9.5%)
+        if daily_change >= 0.095: 
+            return None
+        
+        # 跳过跌停板 (<= -9.5%)
+        if daily_change <= -0.095: 
+            return None
 
-        # 右侧加仓条件
-        macd_ok   = cur['DIF']>0.1 and cur['DEA']>0.1 and cur['DIF']>cur['DEA']
-        macd_up   = cur['DIF']>pre['DIF'] and cur['DEA']>pre['DEA']
-        j_cross   = pre['J']>pre['K'] and cur['J']<=cur['K'] and cur['J']<90
-        j_drop    = (pre['J']-cur['J'])/pre['J'] if pre['J']>0 else 0
-        vol_up    = cur['成交量'] > pre['成交量']*1.2
-        not_high  = cur['收盘'] < df['20D_Max'].iloc[-2]
+        # --- 增强版右侧加仓条件 ---
+        
+        # C. MACD 强多头形态
+        macd_bullish = (latest['DIF'] > 0.1) and \
+                       (latest['DEA'] > 0.1) and \
+                       (latest['DIF'] > latest['DEA'])
 
-        if macd_ok and macd_up and j_cross and j_drop>0.05 and vol_up and not_high:
+        # D. MACD 趋势向上
+        macd_rising = (latest['DIF'] > prev['DIF']) and (latest['DEA'] > prev['DEA'])
+
+        # E. KDJ J 值死叉形态
+        j_dead_cross = (prev['J'] > prev['K']) and \
+                       (latest['J'] <= latest['K']) and \
+                       (latest['J'] < 90)
+
+        # F. J 值显著回落 (J值跌幅超过 5%)
+        j_drop_percent = 0.0
+        j_drop_significant = False
+        if prev['J'] > 0:
+            j_drop_percent = (prev['J'] - latest['J']) / prev['J']
+            j_drop_significant = j_drop_percent > 0.05
+        
+        # G. 成交量放量 (最新成交量比前一天增加 20% 以上)
+        volume_rising = latest['成交量'] > prev['成交量'] * 1.2
+
+        # H. 非新高 (最新收盘价低于前一天计算的 20 日收盘价最高点)
+        not_new_high = latest['收盘'] < df['20D_Max'].iloc[-2]
+
+        # 结合所有判断
+        if all([macd_bullish, macd_rising, j_dead_cross, j_drop_significant, volume_rising, not_new_high]):
+            # --- 构造指定的输出字段 ---
+            
             return {
                 '股票代码': stock_code,
-                '日期'    : cur['日期'].strftime('%Y-%m-%d'),
-                '收盘'    : round(cur['收盘'],2),
-                '涨跌幅'  : round(chg*100,2),
-                'J值跌幅%': round(j_drop*100,1),
-                'MACD_DIF': round(cur['DIF'],4),
-                'MACD_DEA': round(cur['DEA'],4),
-                'KDJ_J'   : round(cur['J'],1),
-                '说明'    : '右侧加仓点：MACD多头抬升，KDJ J值显著死叉回调'
+                '日期': latest['日期'].strftime('%Y-%m-%d'),
+                '收盘': round(latest['收盘'], 2),
+                '涨跌幅': round(daily_change * 100, 2),
+                'J值跌幅%': round(j_drop_percent * 100, 1),
+                'MACD_DIF': round(latest['DIF'], 4),
+                'MACD_DEA': round(latest['DEA'], 4),
+                'KDJ_J': round(latest['J'], 1),
+                '说明': '右侧加仓点：MACD多头抬升，KDJ J值显著死叉回调'
             }
+            
     except Exception as e:
-        log.error(f"处理 {stock_code} 出错: {e}")
+        # 打印错误信息
+        print(f"处理股票 {stock_code} 时出错: {e}")
+        
     return None
 
-# ---------- 动态查找信号文件 ----------
-def find_signal_file() -> List[str]:
-    tz   = pytz.timezone(TIMEZONE)
-    now  = datetime.now(tz).date()
-    log.info(f"当前上海日期: {now}，开始搜索信号文件（最多向前 3 天）")
+# --- 文件查找逻辑 ---
+def find_and_read_signals():
+    """
+    尝试从 buy_signals 目录读取今天的、昨天的、或前天的信号文件，
+    并返回股票代码列表。
+    """
+    shanghai_tz = pytz.timezone(TIMEZONE)
+    # 获取当前上海日期，并将其时间部分归零
+    now_shanghai = datetime.now(shanghai_tz).date()
+    
+    # 搜索范围：今天, 昨天, 前天 (最多向前推两天，覆盖周末和假日)
+    search_dates = [
+        now_shanghai,
+        now_shanghai - timedelta(days=1),
+        now_shanghai - timedelta(days=2)
+    ]
+    
+    found_date = None
+    
+    for date in search_dates:
+        date_str = date.strftime("%Y%m%d")
+        
+        # *** 路径修正：使用 YYYYMMDD 作为子目录名 ***
+        signal_dir = os.path.join(BUY_SIGNALS_BASE_DIR, date_str)
+        signal_filename = f"{date_str}.csv"
+        signal_filepath = os.path.join(signal_dir, signal_filename)
+        
+        if os.path.exists(signal_filepath):
+            found_date = date
+            print(f"成功找到信号文件: {signal_filepath}")
+            try:
+                signal_df = pd.read_csv(signal_filepath)
+                
+                # 使用配置的列名
+                if STOCK_CODE_COLUMN_NAME in signal_df.columns:
+                    # 确保股票代码是字符串类型，并去除可能的空格
+                    stock_codes = signal_df[STOCK_CODE_COLUMN_NAME].astype(str).str.strip().tolist()
+                    # 确保代码是唯一的，并过滤掉空值或非法的代码
+                    valid_codes = [code for code in stock_codes if code and len(code) > 2]
+                    return list(set(valid_codes)), found_date
+                else:
+                    print(f"错误: 信号文件 {signal_filepath} 中未找到配置的列名 '{STOCK_CODE_COLUMN_NAME}'。")
+                    return [], None
+            except Exception as e:
+                print(f"读取信号文件 {signal_filepath} 时出错: {e}")
+                return [], None
 
-    codes = []
-    for d in range(3):
-        date = now - timedelta(days=d)
-        ym   = date.strftime("%Y%m")       # 202510
-        dd   = date.strftime("%Y%m%d")     # 20251024
-        path = os.path.join(BUY_SIGNALS_BASE_DIR, ym, f"{dd}.csv")
+    print(f"警告: 在 {BUY_SIGNALS_BASE_DIR} 目录中，最近三天内（{search_dates[0].strftime('%Y-%m-%d')} 至 {search_dates[-1].strftime('%Y-%m-%d')}）未找到符合格式的信号文件。")
+    return [], None
 
-        # ---- 详细诊断信息 ----
-        exists = os.path.exists(path)
-        log.info(f"  检查 [{d}] {date} → {path}  {'存在' if exists else '不存在'}")
-
-        if not exists:
-            # 给出常见原因
-            parent = os.path.dirname(path)
-            if not os.path.isdir(parent):
-                log.warning(f"  父目录不存在: {parent}")
-            continue
-
-        # ---- 读取文件 ----
-        try:
-            df = pd.read_csv(path, dtype=str)   # 先全字符，防止自动转换
-            if '股票代码' not in df.columns:
-                log.error(f"  文件缺少 '股票代码' 列: {path}")
-                continue
-
-            df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
-            df = df.sort_values('日期').drop_duplicates('股票代码', keep='last')
-            cur_codes = df['股票代码'].astype(str).str.zfill(6).tolist()
-            codes.extend(cur_codes)
-            log.info(f"  从 {path} 读取到 {len(cur_codes)} 只股票（去重后）")
-            return list(dict.fromkeys(codes))   # 整体去重并保持首次出现顺序
-        except Exception as e:
-            log.error(f"  读取 {path} 失败: {e}")
-
-    log.warning("未在最近 3 天内找到任何信号文件")
-    return []
-
-# ---------- 主流程 ----------
-def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    stock_codes = find_signal_file()
-    if not stock_codes:
-        log.info("没有可处理的股票代码，程序结束")
+# --- 主执行逻辑 (多进程运行) ---
+def main_optimized():
+    # 1. 查找并读取信号文件中的股票代码
+    stock_codes_to_process, found_date = find_and_read_signals()
+    
+    if not stock_codes_to_process:
+        print("没有可供处理的股票代码，程序退出。")
         return
 
-    if not os.path.isdir(INPUT_DIR):
-        log.error(f"历史数据目录不存在: {INPUT_DIR}")
+    print(f"基于信号文件，将对 {len(stock_codes_to_process)} 支股票进行模式筛选。")
+    
+    if not os.path.exists(INPUT_DIR):
+        print(f"错误: 找不到 {INPUT_DIR} 目录。请确保股票历史数据已上传。")
         return
 
-    log.info(f"准备并行处理 {len(stock_codes)} 只股票（{NUM_PROCESSES} 进程）")
+    print(f"使用 {NUM_PROCESSES} 个进程并行处理...")
+
+    # 2. 使用多进程池并行处理文件
     with Pool(NUM_PROCESSES) as pool:
-        results = pool.map(process, stock_codes)
+        # pool.map 会阻塞直到所有结果都返回
+        results = pool.map(process_stock_file, stock_codes_to_process)
+        
+    # 过滤掉 None 的结果
+    all_results = [r for r in results if r is not None]
 
-    valid = [r for r in results if r]
-    if not valid:
-        log.info("没有符合右侧加仓条件的股票")
+    # --- 结果输出到指定目录 ---
+    if not all_results:
+        print("未发现符合增强版右侧模式的股票。")
         return
 
-    tz = pytz.timezone(TIMEZONE)
-    now = datetime.now(tz)
-    out_dir = os.path.join(OUTPUT_DIR, now.strftime("%Y%m"))
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir,
-                f"right_side_pattern_enhanced_{now.strftime('%Y%m%d%H%M%S')}.csv")
-
-    pd.DataFrame(valid).to_csv(out_path, index=False, encoding='utf-8-sig')
-    log.info(f"成功输出 {len(valid)} 条记录 → {out_path}")
+    results_df = pd.DataFrame(all_results)
+    
+    # 3. 结果输出设置
+    
+    # 获取当前时间（上海时区）
+    shanghai_tz = pytz.timezone(TIMEZONE)
+    now_shanghai = datetime.now(shanghai_tz)
+    
+    # 格式化时间戳和路径 (使用当前时间)
+    timestamp_str = now_shanghai.strftime("%Y%m%d%H%M%S")
+    year_month_dir = now_shanghai.strftime("%Y%m")
+    
+    # 创建输出目录
+    final_output_dir = os.path.join(OUTPUT_DIR, year_month_dir)
+    os.makedirs(final_output_dir, exist_ok=True)
+    
+    # 构造输出文件名
+    # 在文件名中加入信号日期作为标识
+    signal_date_str = found_date.strftime("%Y%m%d") if found_date else "unknown"
+    output_filename = f"right_side_pattern_enhanced_{signal_date_str}_{timestamp_str}.csv"
+    output_path = os.path.join(final_output_dir, output_filename)
+    
+    # 保存结果
+    results_df.to_csv(output_path, index=False, encoding='utf-8')
+    print(f"成功筛选出 {len(all_results)} 条记录，已保存至: {output_path}")
 
 if __name__ == "__main__":
-    # 强制使用上海时区（配合你手动 export TZ='Asia/Shanghai'）
-    os.environ['TZ'] = TIMEZONE
-    try:
-        import time
-        time.tzset()
-    except AttributeError:   # Windows 不支持 tzset
-        pass
-    main()
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(BUY_SIGNALS_BASE_DIR, exist_ok=True)
+    main_optimized()
