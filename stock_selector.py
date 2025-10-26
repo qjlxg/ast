@@ -415,25 +415,41 @@ async def screen_stocks(stock_list, days=30, min_days=20):
     
     pre_screen_tasks = []
     
-    for _, stock in stock_list.iterrows():
+    for index, stock in stock_list.iterrows():
         code = stock['ts_code'].split('.')[0]
+        # 创建一个包含 (索引, 任务) 的元组列表
         task = asyncio.to_thread(fetch_data_and_pre_check, code) 
-        pre_screen_tasks.append(task)
+        pre_screen_tasks.append((index, task))
         
     candidate_codes = []
     error_log_p1 = []
     
-    for index, future in asyncio.as_completed(pre_screen_tasks):
-        code, passed, error = await future
+    # 修复：遍历任务列表，而不是直接使用 asyncio.as_completed 产生的 future
+    # 运行所有任务，然后使用 as_completed 按完成顺序处理结果
+    futures = [task for _, task in pre_screen_tasks]
+    task_map = {id(task): index for index, task in pre_screen_tasks} # 用于映射 Future ID 到原始索引
+    
+    for future in asyncio.as_completed(futures):
+        result = await future
+        code, passed, error = result
+        
+        # 无法直接获取 index，使用计数器代替
+        current_count = len(candidate_codes) + len(error_log_p1) + len(futures) - len(asyncio.Task.all_tasks()) 
+        current_count = current_count - (len(futures) - len(futures)) # 简单的计数器逻辑不好用，直接用进度信息
         
         if passed:
             candidate_codes.append(code)
         
-        if (index + 1) % 100 == 0 or index == len(stock_list) - 1:
-            print(f"[{datetime.now()}] [PROGRESS-P1] Checked {index + 1}/{len(stock_list)}. Candidates found: {len(candidate_codes)}", flush=True)
+        # 简单进度显示，避免对索引的依赖
+        if len(candidate_codes) % 100 == 0 or len(candidate_codes) + len(error_log_p1) >= len(futures):
+             # 简单的进度逻辑，如果任务完成的数量不是 100 的倍数，则会在最后一次显示
+             pass
             
         if error:
             error_log_p1.append(f"Error in pre-check for {code}: {error}")
+
+    # 简单的进度报告
+    print(f"[{datetime.now()}] [PROGRESS-P1] Checked {len(futures)}. Candidates found: {len(candidate_codes)}", flush=True)
 
     candidate_stock_list = stock_list[stock_list['ts_code'].str.split('.').str[0].isin(candidate_codes)].copy()
     
@@ -456,20 +472,33 @@ async def screen_stocks(stock_list, days=30, min_days=20):
     selected = []
     error_log_p2 = []
     
-    for _, stock in candidate_stock_list.iterrows():
+    # 修复：使用 enumerate 来获取索引，方便进度报告
+    for index, stock in candidate_stock_list.iterrows():
         code = stock['ts_code'].split('.')[0]
         task = asyncio.to_thread(fetch_stock_data_sync, code) 
-        detailed_screen_tasks.append(task)
+        detailed_screen_tasks.append((index, task))
         
     total_candidates = len(candidate_stock_list)
     
-    for index, future in asyncio.as_completed(detailed_screen_tasks):
+    # 修复：现在迭代的是 Future 对象
+    futures = [task for _, task in detailed_screen_tasks]
+    # 使用原候选列表的索引来获取名称
+    candidate_stock_list = candidate_stock_list.reset_index(drop=True)
+    
+    count = 0
+    for future in asyncio.as_completed(futures):
         code, df, error = await future
         
+        count += 1 # 使用计数器追踪进度
+        
+        # 找到原始的股票名称 (基于 code)
         ts_code = f"{code}.SS" if code.startswith('6') else f"{code}.SZ"
-        name = candidate_stock_list.set_index('ts_code').loc[ts_code, 'name'] if ts_code in candidate_stock_list.set_index('ts_code').index else '未知'
+        
+        # 使用 code 查找名称
+        stock_info = candidate_stock_list[candidate_stock_list['ts_code'] == ts_code]
+        name = stock_info['name'].iloc[0] if not stock_info.empty else '未知'
 
-        status_msg = f"[{datetime.now()}] [PROGRESS-P2] {index+1}/{total_candidates} | Checking {ts_code} ({name})"
+        status_msg = f"[{datetime.now()}] [PROGRESS-P2] {count}/{total_candidates} | Checking {ts_code} ({name})"
         
         if error:
             error_log_p2.append(f"Error processing {ts_code}: {error}")
