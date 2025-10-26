@@ -3,137 +3,161 @@ import pandas as pd
 from datetime import datetime
 import pytz
 from multiprocessing import Pool, cpu_count
+import numpy as np
 
 # --- 配置 ---
 INPUT_DIR = "stock_data"
 OUTPUT_DIR = "results"
 TIMEZONE = "Asia/Shanghai"  # 上海时区
-# 使用 CPU 核心数减 1 进行并行处理，确保系统稳定
+# 使用 CPU 核心数减 1 进行并行处理，提高效率
 NUM_PROCESSES = max(1, cpu_count() - 1) 
 
 # --- 技术指标计算函数 ---
 def calculate_macd(df, short_period=12, long_period=26, signal_period=9):
-    """计算 MACD 指标 (DIF, DEA, MACD 柱)"""
-    # 确保 '收盘' 列是数字类型 (已在 preprocess_stock 中处理)
-
-    # 计算 EMA
+    """计算 MACD 指标 (DIF, DEA)"""
     df['EMA_short'] = df['收盘'].ewm(span=short_period, adjust=False).mean()
     df['EMA_long'] = df['收盘'].ewm(span=long_period, adjust=False).mean()
-
-    # 计算 DIF (快线)
     df['DIF'] = df['EMA_short'] - df['EMA_long']
-
-    # 计算 DEA (慢线 / 信号线)
     df['DEA'] = df['DIF'].ewm(span=signal_period, adjust=False).mean()
-
-    # MACD 柱不用于筛选，但可以计算
-    # df['MACD'] = (df['DIF'] - df['DEA']) * 2
     return df
 
 def calculate_kdj(df, n=9, m1=3, m2=3):
     """计算 KDJ 指标 (RSV, K, D, J)"""
-    # 确保价格列是数字类型 (已在 preprocess_stock 中处理)
-
-    # 1. 计算 RSV
     low_list = df['最低'].rolling(window=n).min()
     high_list = df['最高'].rolling(window=n).max()
     
-    # 使用 np.divide 或 pd.Series.div 进行矢量化除法，处理分母为 0 的情况
     range_diff = high_list - low_list
-    df['RSV'] = (df['收盘'] - low_list).div(range_diff.replace(0, float('nan'))) * 100
-    df['RSV'] = df['RSV'].fillna(100) # 当 H=L 时，通常认为 RSV=100
+    df['RSV'] = (df['收盘'] - low_list).div(range_diff.replace(0, np.nan)) * 100
+    df['RSV'] = df['RSV'].fillna(100) 
 
-    # 2. 计算 K (简单移动平均)
     df['K'] = df['RSV'].ewm(com=m1 - 1, adjust=False).mean()
-
-    # 3. 计算 D (K 的移动平均)
     df['D'] = df['K'].ewm(com=m2 - 1, adjust=False).mean()
-
-    # 4. 计算 J
     df['J'] = 3 * df['K'] - 2 * df['D']
     return df
 
-# --- 数据预处理 (在并行任务中执行) ---
+# --- 数据预处理 ---
 def preprocess_stock(df):
     """将关键列转换为数值类型，并按日期排序"""
     
-    # 转换为 datetime 对象并排序
+    # 转换为日期格式并排序
     df['日期'] = pd.to_datetime(df['日期'])
     df = df.sort_values(by='日期').reset_index(drop=True)
     
-    # 确保关键价格列是数值类型
-    price_cols = ['开盘', '收盘', '最高', '最低']
-    for col in price_cols:
+    # 确保价格和成交量为数字
+    price_volume_cols = ['开盘', '收盘', '最高', '最低', '成交量']
+    for col in price_volume_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # 丢弃任何因为非数字数据导致的 NaN 行 (虽然不理想，但确保指标计算稳定)
-    df = df.dropna(subset=price_cols)
+    # 丢弃 NaN 行
+    df = df.dropna(subset=price_volume_cols)
     
     return df
 
-# --- 核心筛选逻辑 (在并行任务中执行) ---
+# --- 核心筛选逻辑 (包含实盘过滤) ---
 def process_stock_file(filename):
-    """处理单个股票文件，计算指标并检查模式"""
+    """处理单个股票文件，计算指标并检查增强版右侧模式"""
     filepath = os.path.join(INPUT_DIR, filename)
     stock_code = filename.replace('.csv', '')
     
     try:
         df = pd.read_csv(filepath)
         
-        if df.empty or len(df) < 30:
-            return None # 数据太少或为空，跳过
-
         df = preprocess_stock(df)
         
-        # 重新检查数据长度
+        # 1. 数据充足性检查 (至少需要 30 天数据)
         if len(df) < 30:
-             return None
+            return None 
 
-        # 计算指标
         df = calculate_macd(df)
         df = calculate_kdj(df)
         
-        # --- 检查模式 ---
+        # 滚动计算 20 日收盘价最大值
+        df['20D_Max'] = df['收盘'].rolling(window=20).max()
+        
         # 获取最后两天的数据
         latest = df.iloc[-1]
         prev = df.iloc[-2]
 
-        # 条件 1 & 3: MACD 趋势判断 (多头 & 未走坏)
-        macd_bullish_trend = (latest['DIF'] > latest['DEA']) and \
-                             (latest['DIF'] > 0 and latest['DEA'] > 0)
+        # 2. 确保前一天的 20D_Max 存在 (即至少有 20 天数据用于计算)
+        if df['20D_Max'].iloc[-2] is np.nan:
+             return None 
         
-        # MACD 趋势向上 (多头形态下的上升形态)
+        # --- 涨跌停/停牌过滤 (实盘必备) ---
+        
+        # A. 停牌过滤 (成交量 <= 0)
+        if latest['成交量'] <= 0:
+            return None
+        
+        # B. 涨跌停过滤
+        if prev['收盘'] <= 0:
+            return None
+            
+        daily_change = (latest['收盘'] / prev['收盘'] - 1)
+        
+        # 跳过涨停板 (>= 9.5%)
+        if daily_change >= 0.095: 
+            return None
+        
+        # 跳过跌停板 (<= -9.5%)
+        if daily_change <= -0.095: 
+            return None
+
+        # --- 增强版右侧加仓条件 ---
+        
+        # C. MACD 强多头形态
+        macd_bullish = (latest['DIF'] > 0.1) and \
+                       (latest['DEA'] > 0.1) and \
+                       (latest['DIF'] > latest['DEA'])
+
+        # D. MACD 趋势向上
         macd_rising = (latest['DIF'] > prev['DIF']) and (latest['DEA'] > prev['DEA'])
 
-        # 条件 2: KDJ J 值死叉形态
-        # J 值死叉形态：J 值从前一天的较高水平回落，且 J 值小于等于 K 值 (J > K 变为 J <= K，且 J 值小于 90)
-        j_dead_cross = (prev['J'] > prev['K']) and (latest['J'] <= latest['K']) and (latest['J'] < 90)
+        # E. KDJ J 值死叉形态
+        j_dead_cross = (prev['J'] > prev['K']) and \
+                       (latest['J'] <= latest['K']) and \
+                       (latest['J'] < 90)
+
+        # F. J 值显著回落 (J值跌幅超过 5%)
+        j_drop_percent = 0.0
+        j_drop_significant = False
+        if prev['J'] > 0:
+            j_drop_percent = (prev['J'] - latest['J']) / prev['J']
+            j_drop_significant = j_drop_percent > 0.05
         
-        # 结合判断
-        if macd_bullish_trend and macd_rising and j_dead_cross:
+        # G. 成交量放量 (最新成交量比前一天增加 20% 以上)
+        volume_rising = latest['成交量'] > prev['成交量'] * 1.2
+
+        # H. 非新高 (最新收盘价低于前一天计算的 20 日收盘价最高点)
+        not_new_high = latest['收盘'] < df['20D_Max'].iloc[-2]
+
+        # 结合所有判断
+        if all([macd_bullish, macd_rising, j_dead_cross, j_drop_significant, volume_rising, not_new_high]):
+            # --- 构造指定的输出字段 ---
+            
             return {
                 '股票代码': stock_code,
                 '日期': latest['日期'].strftime('%Y-%m-%d'),
-                '收盘': latest['收盘'],
-                'MACD_DIF': latest['DIF'],
-                'MACD_DEA': latest['DEA'],
-                'KDJ_J': latest['J'],
-                'KDJ_K': latest['K'],
-                'KDJ_D': latest['D'],
-                '说明': 'MACD多头趋势上升，KDJ J值死叉回调，满足右侧加仓条件'
+                '收盘': round(latest['收盘'], 2),
+                '涨跌幅': round(daily_change * 100, 2),
+                'J值跌幅%': round(j_drop_percent * 100, 1),
+                'MACD_DIF': round(latest['DIF'], 4),
+                'MACD_DEA': round(latest['DEA'], 4),
+                'KDJ_J': round(latest['J'], 1),
+                '说明': '右侧加仓点：MACD多头抬升，KDJ J值显著死叉回调'
             }
             
     except Exception as e:
+        # 打印错误信息
         print(f"处理文件 {filename} 时出错: {e}")
         
     return None
 
-# --- 主执行逻辑 ---
+# --- 主执行逻辑 (多进程运行) ---
 def main_optimized():
     stock_files = [f for f in os.listdir(INPUT_DIR) if f.endswith('.csv')]
     
     if not os.path.exists(INPUT_DIR) or not stock_files:
-        print(f"错误: 找不到 {INPUT_DIR} 目录或其中没有 CSV 文件。")
+        print(f"错误: 找不到 {INPUT_DIR} 目录或其中没有 CSV 文件。请确保数据已上传。")
         return
 
     print(f"检测到 {len(stock_files)} 支股票，使用 {NUM_PROCESSES} 个进程并行处理...")
@@ -143,15 +167,14 @@ def main_optimized():
         # pool.map 会阻塞直到所有结果都返回
         results = pool.map(process_stock_file, stock_files)
         
-    # 过滤掉 None 的结果 (即不符合模式的股票)
+    # 过滤掉 None 的结果
     all_results = [r for r in results if r is not None]
 
-    # --- 结果输出 ---
+    # --- 结果输出到指定目录 ---
     if not all_results:
-        print("未发现符合右侧模式的股票。")
+        print("未发现符合增强版右侧模式的股票。")
         return
 
-    # 转换为 DataFrame
     results_df = pd.DataFrame(all_results)
     
     # 获取当前时间（上海时区）
@@ -167,7 +190,7 @@ def main_optimized():
     os.makedirs(final_output_dir, exist_ok=True)
     
     # 构造输出文件名
-    output_filename = f"right_side_pattern_{timestamp_str}.csv"
+    output_filename = f"right_side_pattern_enhanced_{timestamp_str}.csv"
     output_path = os.path.join(final_output_dir, output_filename)
     
     # 保存结果
@@ -176,8 +199,4 @@ def main_optimized():
 
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
-    if 'GITHUB_ACTIONS' not in os.environ:
-        print(f"股票数据期望在 `{INPUT_DIR}/` 目录中。")
-    
     main_optimized()
