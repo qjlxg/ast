@@ -15,6 +15,13 @@ on:
   # schedule:
   #   - cron: '0 10 * * *' 
 
+permissions:
+  contents: write  # 允许读写仓库内容
+
+concurrency:
+  group: stock-analysis-workflow
+  cancel-in-progress: false
+
 jobs:
   run_analysis:
     # 设置运行环境为最新的 Ubuntu
@@ -58,14 +65,24 @@ jobs:
         git add buy_signals
         
         # 3. 检查是否有文件更改或新增 (防止空提交)
-        if git diff --cached --exit-code; then
+        if git diff --cached --exit-code > /dev/null 2>&1; then
           echo "✅ 目录 'buy_signals' 中没有新的分析结果，跳过 Git 提交。"
-        else
-          # 4. 提交更改
-          TIMESTAMP=$(date +%Y%m%d%H%M)
-          git commit -m "🤖 Auto: Add/Update stock buy signals for ${TIMESTAMP}"
-          
-          # 5. 推送到仓库（使用默认的 GITHUB_TOKEN 权限）
-          git push
-          echo "✅ 已将最新的分析结果推送回仓库。"
+          exit 0
         fi
+        
+        # 4. 先拉取最新代码，解决潜在冲突（使用 rebase 保持历史线性）
+        git pull --rebase origin main || {
+          echo "❌ Rebase 失败，可能有冲突，请手动检查仓库。"
+          exit 1
+        }
+        
+        # 5. 重新添加文件（rebase 后可能需要）
+        git add buy_signals
+        
+        # 6. 提交更改
+        TIMESTAMP=$(date +%Y%m%d%H%M)
+        git commit -m "🤖 Auto: Add/Update stock buy signals for ${TIMESTAMP}" || echo "无变更，跳过 commit"
+        
+        # 7. 推送到仓库（使用默认的 GITHUB_TOKEN 权限）
+        git push origin main
+        echo "✅ 已将最新的分析结果推送回仓库。"
