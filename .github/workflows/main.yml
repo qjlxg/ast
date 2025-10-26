@@ -1,0 +1,63 @@
+name: Run Right Side Pattern Scanner
+
+on:
+  push:
+    paths:
+      - 'right_side_pattern.py'  # 脚本变动时自动运行
+      - '.github/workflows/main.yml' # 工作流变动时自动运行
+      # 注意：如果 stock_data/ 目录内容变动也需要自动运行，请添加: - 'stock_data/**'
+  workflow_dispatch: # 允许手动运行
+
+jobs:
+  scan_stocks:
+    runs-on: ubuntu-latest
+    
+    # 步骤环境变量，用于 Git 配置和 Python 路径
+    env:
+      PYTHON_VERSION: '3.x'
+      GIT_AUTHOR_NAME: 'GitHub Actions Bot'
+      GIT_AUTHOR_EMAIL: 'actions@github.com'
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # 获取全部历史记录，以便进行后续的 Git 操作
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        # 安装 pandas 和 pytz 库
+        python -m pip install --upgrade pip
+        pip install pandas pytz
+        
+    # **已移除模拟数据创建步骤**
+        
+    - name: Run Pattern Scanner Script
+      # 设置时区环境变量 (Linux 系统)
+      run: |
+        export TZ='Asia/Shanghai'
+        python right_side_pattern.py
+
+    - name: Configure Git
+      run: |
+        git config --global user.email "${{ env.GIT_AUTHOR_EMAIL }}"
+        git config --global user.name "${{ env.GIT_AUTHOR_NAME }}"
+
+    - name: Commit and Push Results
+      # 检查是否有新的结果文件生成，如果有则提交并推送
+      run: |
+        # 检查是否有文件变化（包括新生成的结果文件）
+        if [[ $(git status --porcelain=v1 results) ]]; then
+          echo "检测到新的结果文件，正在提交..."
+          git add results
+          git commit -m "🤖 Auto: Add new right side pattern scan results - $(date +%Y-%m-%d %H:%M:%S)"
+          git push
+        else
+          echo "未发现新的符合模式的股票结果，无需提交。"
+        fi
