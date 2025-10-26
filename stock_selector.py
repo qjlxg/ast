@@ -222,20 +222,29 @@ def plot_analysis_chart(df, ts_code, name, signal_data, plot_dir):
         
         # 将日期设置为索引
         if not isinstance(df.index, pd.DatetimeIndex):
+             # 确保索引列为日期，并设置为索引
              df.index = pd.to_datetime(df.index)
         
         # 截取用于绘图的数据，例如近 60 个交易日
         plot_df = df.iloc[-60:].copy()
+        
+        # 【修复点 1】：再次强制检查并设置 plot_df 的索引为 DatetimeIndex
+        if not isinstance(plot_df.index, pd.DatetimeIndex):
+             # 理论上上面设置了，这里可能不需要，但为了鲁棒性保留
+             plot_df.index = pd.to_datetime(plot_df.index) 
 
         # 2. 准备绘图配置 (均线mav=(5, 10)直接在mpf.plot中设置)
         
         # MACD: 计算 Hist (DIFF - DEA)
         plot_df['MACD_Hist'] = plot_df['MACD'] - plot_df['Signal']
         
+        # 【修复点 2】：确保 MACD 柱状图的颜色列表是基于 plot_df 的索引长度
+        macd_colors = np.where(plot_df['MACD_Hist'] > 0, '#cc121a', '#17a224').tolist()
+
         # Addplots 配置: MACD 和 RSI
         apds = [
             # MACD 柱状图 (Panel 2)
-            mpf.make_addplot(plot_df['MACD_Hist'], type='bar', color=np.where(plot_df['MACD_Hist'] > 0, '#cc121a', '#17a224').tolist(), 
+            mpf.make_addplot(plot_df['MACD_Hist'], type='bar', color=macd_colors, 
                              width=0.7, secondary_y=False, panel=2, ylabel='MACD'),
             # MACD 快线 (DIF)
             mpf.make_addplot(plot_df['MACD'], color='#ff9900', secondary_y=False, panel=2),
@@ -261,17 +270,22 @@ def plot_analysis_chart(df, ts_code, name, signal_data, plot_dir):
             close_price = plot_df.loc[signal_date]['Close']
             
             # 创建 scatter plot marker (在收盘价上方标记)
+            # 必须传入与 plot_df 索引长度相同的 Series，其他位置为 NaN
+            scatter_data = pd.Series(np.nan, index=plot_df.index)
+            scatter_data.loc[signal_date] = close_price * 1.01 # 标记点的值
+            
             scatters = [
                 mpf.make_addplot(
-                    plot_df.index[plot_df.index == signal_date], 
+                    scatter_data, # 使用 Series 确保索引对齐
                     type='scatter', 
                     markersize=150, 
                     marker='^', 
                     color='red', 
-                    y=close_price * 1.01 # 标记在收盘价上方
+                    panel=0 # 默认在主图
                 )
             ]
             apds.extend(scatters)
+        # 否则 (突破日不在最近 60 天内) 不绘制信号点
 
         # 4. 设置风格
         
@@ -333,6 +347,7 @@ def fetch_stock_data_sync(code, *args, **kwargs):
     try:
         # 使用更灵活的编码读取，如果 utf-8 失败，尝试 gbk
         try:
+            # 原始代码读取后 '日期' 是索引。这里确保读取为列
             df = pd.read_csv(file_path, parse_dates=['日期'], encoding='utf-8')
         except UnicodeDecodeError:
             df = pd.read_csv(file_path, parse_dates=['日期'], encoding='gbk')
@@ -348,6 +363,8 @@ def fetch_stock_data_sync(code, *args, **kwargs):
         
         if not df.empty and '日期' in df.columns and '收盘' in df.columns:
             df = df[required_cols]
+            # 确保 '日期' 这一列数据类型是 datetime
+            df['日期'] = pd.to_datetime(df['日期'])
             return code, df, None
         
         return code, None, "Local data file is empty or incomplete."
@@ -496,6 +513,9 @@ async def screen_stocks(stock_list, days=30, min_days=20):
             print(f"{status_msg} - FAILED (Data Error)", flush=True)
             continue
             
+        # 【重要】确保 df 在此处的索引是行号，而不是日期，因为下面的逻辑依赖于 iloc 
+        # df = df.sort_values('日期').reset_index(drop=True) 已经执行
+
         if df.empty or len(df) < days + 26: # 需要足够的历史数据计算 MACD 和 RSI
             error_log_p2.append(f"Skipping {ts_code}: Insufficient data ({len(df)} days). Required: {days + 26}")
             print(f"{status_msg} - SKIPPED (Data Insufficient)", flush=True)
@@ -503,9 +523,7 @@ async def screen_stocks(stock_list, days=30, min_days=20):
         
         try:
             # --- 数据准备及指标计算 ---
-            df = df.sort_values('日期').reset_index(drop=True)
-            df['日期'] = pd.to_datetime(df['日期'])
-            df['trade_date'] = df['日期'].dt.strftime('%Y%m%d')
+            # df 在此是按日期升序排列且索引为 0, 1, 2...
             
             # 计算指标 (MACD, RSI 必须在完整的 DF 上计算)
             # MACD (默认参数: 快线12, 慢线26, 信号线9)
@@ -570,6 +588,7 @@ async def screen_stocks(stock_list, days=30, min_days=20):
             df_recent['Is_Limit_Up'] = df_recent.apply(lambda row: is_limit_up(row['收盘'], row['Pre_Close']), axis=1)
             trigger_day_data = None
             
+            # 从倒数第2天（D-1）开始往前找
             for i in range(2, min(22, len(df_recent) + 1)): 
                 lu_day = df_recent.iloc[-i]
                 
@@ -586,14 +605,24 @@ async def screen_stocks(stock_list, days=30, min_days=20):
                 if curr['收盘'] >= curr['BB_LOWER']:
                     
                     # 筛选条件 2：检查突破日到昨天，回踩过程中收盘价是否跌破布林带下轨
-                    start_index = df_recent.index.get_loc(trigger_day_data.name)
-                    # 检查从突破日到昨天的回踩过程中是否有弱势信号
+                    # 注意：由于 df_recent 已经被 reset_index，需要使用 loc/iloc 的索引
+                    # 这里的 loc 可能需要改为 iloc，但由于 df_recent 索引是连续的 0,1,2... 且是 copy() 后的，直接使用 .name 查找其在 df_recent 中的索引位置。
+                    start_index = df_recent.index[df_recent['日期'] == trigger_day_data['日期']].tolist()
+                    if start_index:
+                         start_index = start_index[0]
+                    else:
+                         # 理论上不会发生，如果发生了就跳过
+                         print(f"{status_msg} - NO MATCH (Failed: Internal index error)", flush=True)
+                         continue
+                    
+                    # 检查从突破日（start_index）到昨天的回踩过程中（到倒数第2个元素）
                     if (df_recent.iloc[start_index:-1]['收盘'] < df_recent.iloc[start_index:-1]['BB_LOWER']).any():
                         print(f"{status_msg} - NO MATCH (Failed: Broke BB_LOWER during callback)", flush=True)
                         continue # 回踩过程中跌破下轨，信号取消
                     
                     # 筛选条件 3：原始缩量回踩 5 日线逻辑 
                     callback_shrink = False
+                    # 检查 D-1 到 D-4 的任意一天（倒数第2到倒数第5个元素）
                     for i in range(2, min(5, len(df_recent) + 1)): 
                         prev_day_callback = df_recent.iloc[-i] 
                         
@@ -602,6 +631,7 @@ async def screen_stocks(stock_list, days=30, min_days=20):
                             callback_shrink = True
                             break
                             
+                    # 筛选条件 4：当前收盘价高于 5 日均线 98%
                     if callback_shrink and curr['收盘'] >= curr['MA5'] * 0.98:
                         
                         signal = '买入（涨停放量突破前高 + 缩量回踩5日线 + BB下轨确认）'
@@ -612,11 +642,13 @@ async def screen_stocks(stock_list, days=30, min_days=20):
             
             if signal:
                 # 构造绘图数据，包含 MACD, RSI
+                # 必须包含日期列
                 df_plot = df_recent[[
                     '日期', '开盘', '最高', '最低', '收盘', '成交量', 
                     'MA5', 'MA10', 'VOL_MA20', 'BB_UPPER', 'BB_MIDDLE', 'BB_LOWER',
-                    'MACD', 'Signal', 'RSI' # 新增的指标
+                    'MACD', 'Signal', 'RSI' 
                 ]].copy()
+                # 重新设置为日期索引，用于 mplfinance
                 df_plot.set_index('日期', inplace=True)
                 
                 # 使用新的绘图函数
@@ -640,13 +672,14 @@ async def screen_stocks(stock_list, days=30, min_days=20):
                     '信号': signal,
                 })
                 
+                print(f"[{datetime.now()}] K-Line plot saved: {os.path.join(K_LINE_PLOTS_DIR, f'{code_no_suffix}_{name}_analysis.png')}", flush=True)
                 print(f"{status_msg} - MATCHED! Signal: {signal}", flush=True) 
             else:
                 print(f"{status_msg} - NO MATCH", flush=True)
 
         except Exception as e:
             error_log_p2.append(f"Error processing {ts_code} in screening logic: {str(e)}")
-            print(f"{status_msg} - FAILED (Logic Error)", flush=True)
+            print(f"{status_msg} - FAILED (Logic Error: {str(e)})", flush=True)
             continue
     
     # 统一写入所有日志文件
