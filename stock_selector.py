@@ -417,39 +417,32 @@ async def screen_stocks(stock_list, days=30, min_days=20):
     
     for index, stock in stock_list.iterrows():
         code = stock['ts_code'].split('.')[0]
-        # 创建一个包含 (索引, 任务) 的元组列表
+        # 创建任务列表
         task = asyncio.to_thread(fetch_data_and_pre_check, code) 
-        pre_screen_tasks.append((index, task))
+        pre_screen_tasks.append(task)
         
     candidate_codes = []
     error_log_p1 = []
     
-    # 修复：遍历任务列表，而不是直接使用 asyncio.as_completed 产生的 future
-    # 运行所有任务，然后使用 as_completed 按完成顺序处理结果
-    futures = [task for _, task in pre_screen_tasks]
-    task_map = {id(task): index for index, task in pre_screen_tasks} # 用于映射 Future ID 到原始索引
+    futures = pre_screen_tasks
+    count = 0
+    total_futures = len(futures)
     
     for future in asyncio.as_completed(futures):
         result = await future
         code, passed, error = result
         
-        # 无法直接获取 index，使用计数器代替
-        current_count = len(candidate_codes) + len(error_log_p1) + len(futures) - len(asyncio.Task.all_tasks()) 
-        current_count = current_count - (len(futures) - len(futures)) # 简单的计数器逻辑不好用，直接用进度信息
+        count += 1
         
         if passed:
             candidate_codes.append(code)
         
-        # 简单进度显示，避免对索引的依赖
-        if len(candidate_codes) % 100 == 0 or len(candidate_codes) + len(error_log_p1) >= len(futures):
-             # 简单的进度逻辑，如果任务完成的数量不是 100 的倍数，则会在最后一次显示
-             pass
-            
+        # 修复后的进度显示：每 100 个任务或在任务完成时显示
+        if count % 100 == 0 or count == total_futures: 
+            print(f"[{datetime.now()}] [PROGRESS-P1] Checked {count}/{total_futures}. Candidates found: {len(candidate_codes)}", flush=True)
+
         if error:
             error_log_p1.append(f"Error in pre-check for {code}: {error}")
-
-    # 简单的进度报告
-    print(f"[{datetime.now()}] [PROGRESS-P1] Checked {len(futures)}. Candidates found: {len(candidate_codes)}", flush=True)
 
     candidate_stock_list = stock_list[stock_list['ts_code'].str.split('.').str[0].isin(candidate_codes)].copy()
     
@@ -472,16 +465,14 @@ async def screen_stocks(stock_list, days=30, min_days=20):
     selected = []
     error_log_p2 = []
     
-    # 修复：使用 enumerate 来获取索引，方便进度报告
     for index, stock in candidate_stock_list.iterrows():
         code = stock['ts_code'].split('.')[0]
         task = asyncio.to_thread(fetch_stock_data_sync, code) 
-        detailed_screen_tasks.append((index, task))
+        detailed_screen_tasks.append(task)
         
     total_candidates = len(candidate_stock_list)
     
-    # 修复：现在迭代的是 Future 对象
-    futures = [task for _, task in detailed_screen_tasks]
+    futures = detailed_screen_tasks
     # 使用原候选列表的索引来获取名称
     candidate_stock_list = candidate_stock_list.reset_index(drop=True)
     
@@ -549,17 +540,17 @@ async def screen_stocks(stock_list, days=30, min_days=20):
             prev = df_recent.iloc[-2] if len(df_recent) >= 2 else None
             
             # ------------------------------------------------------------------
-            # 【实盘过滤修改点】: 过滤当日涨停、跌停、成交量为0的股票 (无法买入/交易)
+            # 【实盘过滤】: 过滤当日涨停、跌停、成交量为0的股票
             # ------------------------------------------------------------------
             if prev is not None and prev['收盘'] > 0:
                 daily_change = (curr['收盘'] / prev['收盘'] - 1)
                 
-                # 涨停板判断 (A股主板/创业板/科创板通用：±9.9% 或更高)
+                # 涨停板判断 (±9.9% 或更高)
                 if daily_change >= 0.099:
                     print(f"{status_msg} - NO MATCH (Filtered: Current day limit up - Cannot buy)", flush=True)
                     continue 
                 
-                # 跌停板判断 (A股主板/创业板/科创板通用：-9.9% 或更低)
+                # 跌停板判断 (±9.9% 或更低)
                 if daily_change <= -0.099:
                     print(f"{status_msg} - NO MATCH (Filtered: Current day limit down)", flush=True)
                     continue
@@ -591,22 +582,20 @@ async def screen_stocks(stock_list, days=30, min_days=20):
             
             if trigger_day_data is not None:
                 
-                # ***** 修改点 1: 弱化强势确认条件 (中轨 -> 下轨) *****
                 # 筛选条件 1：当前收盘价必须在布林带下轨之上确认未崩盘
                 if curr['收盘'] >= curr['BB_LOWER']:
                     
                     # 筛选条件 2：检查突破日到昨天，回踩过程中收盘价是否跌破布林带下轨
-                    # 保持这个严格条件不变
                     start_index = df_recent.index.get_loc(trigger_day_data.name)
                     # 检查从突破日到昨天的回踩过程中是否有弱势信号
                     if (df_recent.iloc[start_index:-1]['收盘'] < df_recent.iloc[start_index:-1]['BB_LOWER']).any():
                         print(f"{status_msg} - NO MATCH (Failed: Broke BB_LOWER during callback)", flush=True)
                         continue # 回踩过程中跌破下轨，信号取消
                     
-                    # 筛选条件 3：原始缩量回踩 5 日线逻辑 (保持不变)
+                    # 筛选条件 3：原始缩量回踩 5 日线逻辑 
                     callback_shrink = False
                     for i in range(2, min(5, len(df_recent) + 1)): 
-                        prev_day_callback = df_recent.iloc[-i] # 使用不同的变量名以避免与上面的 prev 混淆
+                        prev_day_callback = df_recent.iloc[-i] 
                         
                         if (prev_day_callback['成交量'] < prev_day_callback['VOL_MA5'] * 0.8 and 
                             abs(prev_day_callback['收盘'] - prev_day_callback['MA5']) / prev_day_callback['MA5'] <= 0.02):
@@ -615,7 +604,6 @@ async def screen_stocks(stock_list, days=30, min_days=20):
                             
                     if callback_shrink and curr['收盘'] >= curr['MA5'] * 0.98:
                         
-                        # 修改信号描述，反映 BB 确认条件的弱化
                         signal = '买入（涨停放量突破前高 + 缩量回踩5日线 + BB下轨确认）'
                         pre_high_val = trigger_day_data['pre_high_20']
                         limit_up_date_val = trigger_day_data['trade_date']
