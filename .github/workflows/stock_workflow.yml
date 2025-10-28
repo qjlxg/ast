@@ -4,7 +4,7 @@ on:
   # 触发器 1: 监听对指定文件的 push 操作
   push:
     paths:
-      - 'stock_workflow.yml'
+      - '.github/workflows/stock_workflow.yml'
       - 'stock_analysis_v2.py'
   
   # 触发器 2: 允许手动触发 (在 GitHub Actions 页面可见)
