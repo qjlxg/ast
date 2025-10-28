@@ -7,8 +7,8 @@ on:
   # 2. 自动在代码变更时触发，用于开发和测试
   push:
     branches:
-      - main  # 假设主分支为 main
-      - master # 兼容 master 分支
+      - main     # 假设主分支为 main
+      - master   # 兼容 master 分支
     paths:
       - 'screener.py'
       - '.github/workflows/screener.yml'
@@ -21,17 +21,14 @@ jobs:
   run_screener:
     runs-on: ubuntu-latest
     
-    # 【修改 1/3】移除硬编码的 TODAY_DATE 环境变量
-    # env:
-    #   TODAY_DATE: 20251022 
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+        # 【重要优化】确保拉取完整历史记录，有助于后续 git 操作
+        with:
+          fetch-depth: 0 
+          
       # 【新增步骤】获取并设置当前日期为环境变量，格式为 YYYYMMDD
-      # 注意：在 Linux 环境中，date 命令默认使用工作流运行时的 UTC 时间。
-      # 如果需要精确的上海时间，可能需要更复杂的时区转换，但对于每日定时任务，使用脚本内 datetime.now() 通常更可靠。
       - name: Set Today's Date Variable
         id: date
         run: echo "TODAY_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
@@ -48,15 +45,26 @@ jobs:
           pip install pandas numpy
 
       - name: Run Stock Screener Script
-        # 【修改 2/3】不再向 Python 脚本传入日期参数，让脚本自动获取日期
+        # 不再向 Python 脚本传入日期参数，让脚本自动获取日期
         run: python screener.py 
-
+      
+      # ==========================================================
+      # 【核心修复】解决推送被拒绝的问题 (non-fast-forward issue)
+      # ==========================================================
+      - name: Pull and Rebase before Commit
+        # 必须在 git-auto-commit-action 之前执行，用于解决定时任务导致的冲突
+        run: |
+          # 必须先配置提交者信息
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # 拉取远程最新代码并 rebase（变基），将本地提交放在远程提交之后，解决非快进冲突
+          git pull --rebase origin main
+          
       - name: Commit and Push results
-        # 【修改 3/3】使用新设置的 GITHUB_ENV 变量 TODAY_DATE
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           # 提交当天生成的筛选结果文件
           file_pattern: screened_signals/${{ env.TODAY_DATE }}/*.csv
           commit_message: "🤖 Daily Stock Screening Results for ${{ env.TODAY_DATE }}"
           skip_dirty_check: true
-          force_push: true
+          # 【修复点 1】移除无效的 'force_push: true'
