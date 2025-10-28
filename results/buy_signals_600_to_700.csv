@@ -1,6 +1,5 @@
 ﻿股票代码,股票名称,买入信号,评分,图表路径
-002122,汇洲智能,RSI值为34.78，处于低位回升阶段; MACD金叉形成,35,results/002122_汇洲智能_analysis.png
-002169,智光电气,MACD金叉形成; KDJ低位金叉,35,results/002169_智光电气_analysis.png
+002127,南极电商,MA金叉形成; RSI值为48.00，处于低位回升阶段,35,results/002127_南极电商_analysis.png
+002175,东方智造,RSI值为41.10，处于低位回升阶段; MACD金叉形成,35,results/002175_东方智造_analysis.png
 002212,天融信,RSI值为40.59，处于低位回升阶段; KDJ低位金叉,30,results/002212_天融信_analysis.png
 002221,东华能源,RSI值为21.71，股票可能超卖; MACD金叉形成,30,results/002221_东华能源_analysis.png
-002224,三 力 士,RSI值为49.09，处于低位回升阶段; MACD金叉形成,35,results/002224_三 力 士_analysis.png
