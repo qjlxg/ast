@@ -13,7 +13,7 @@ on:
 
   # 示例：定时任务
   # schedule:
-  #   - cron: '0 10 * * *' 
+  #   - cron: '0 10 * * *'  
 
 permissions:
   contents: write  # 允许读写仓库内容
@@ -52,7 +52,7 @@ jobs:
         echo "工作流当前运行的时区和时间: $TZ $(date)"
         python stock_analysis_v2.py
         
-    # --- 提交并推送结果到仓库 ---
+    # --- 提交并推送结果到仓库 (修复了 Rebase 错误) ---
     - name: 提交并推送结果 (Commit and Push Results)
       # 仅在脚本成功运行后执行
       if: success()
@@ -66,23 +66,27 @@ jobs:
         
         # 3. 检查是否有文件更改或新增 (防止空提交)
         if git diff --cached --exit-code > /dev/null 2>&1; then
-          echo "✅ 目录 'buy_signals' 中没有新的分析结果，跳过 Git 提交。"
+          echo "✅ 目录 'buy_signals' 中没有新的分析结果，跳过 Git 提交和推送。"
           exit 0
         fi
         
-        # 4. 先拉取最新代码，解决潜在冲突（使用 rebase 保持历史线性）
+        # 4. 【修复点】提交更改
+        #    必须在 'git pull --rebase' 之前进行提交，以清空暂存区，
+        #    避免 "Your index contains uncommitted changes" 错误。
+        TIMESTAMP=$(date +%Y%m%d%H%M)
+        COMMIT_MESSAGE="🤖 Auto: Add/Update stock buy signals for ${TIMESTAMP}"
+        git commit -m "$COMMIT_MESSAGE" || {
+          echo "❌ 提交失败，请检查。"
+          exit 1
+        }
+
+        # 5. 拉取最新代码，解决潜在冲突（使用 rebase 保持历史线性）
+        #    本地更改（第4步的提交）现在是干净的，可以安全执行 rebase。
         git pull --rebase origin main || {
           echo "❌ Rebase 失败，可能有冲突，请手动检查仓库。"
           exit 1
         }
         
-        # 5. 重新添加文件（rebase 后可能需要）
-        git add buy_signals
-        
-        # 6. 提交更改
-        TIMESTAMP=$(date +%Y%m%d%H%M)
-        git commit -m "🤖 Auto: Add/Update stock buy signals for ${TIMESTAMP}" || echo "无变更，跳过 commit"
-        
-        # 7. 推送到仓库（使用默认的 GITHUB_TOKEN 权限）
+        # 6. 推送到仓库（使用默认的 GITHUB_TOKEN 权限）
         git push origin main
         echo "✅ 已将最新的分析结果推送回仓库。"
