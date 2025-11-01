@@ -35,17 +35,23 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # 3. 安装依赖 (已修复 libta-lib-dev 无法定位的问题)
-      - name: 🔧 Install Dependencies (pandas, ta-lib)
+      # 3. 🔧 安装依赖 (TA-Lib 源码编译安装 - 最终稳定方案)
+      - name: 🛠️ Install TA-Lib from Source and Python packages
         run: |
-          # 确保 universe 仓库已启用，该仓库包含 libta-lib-dev
+          # 确保安装编译所需的工具
           sudo apt-get update
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y universe
-
-          # 再次更新并安装 ta-lib 依赖库
-          sudo apt-get update
-          sudo apt-get install -y libta-lib-dev
+          sudo apt-get install -y build-essential wget
+          
+          # 下载 TA-Lib 源码包
+          wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0.tar.gz
+          tar -xzf ta-lib-0.4.0.tar.gz
+          
+          # 编译和安装 C 库
+          cd ta-lib
+          ./configure --prefix=/usr
+          make
+          sudo make install
+          cd ..
 
           # 安装 Python 包
           pip install pandas numpy ta-lib
@@ -59,6 +65,7 @@ jobs:
           fi
           
       # 5. 生成信号并格式化文件名
+      # 注意：请确保 d1_signal.py 脚本已修改为自动获取日期或使用硬编码日期
       - name: 🚀 Run Signal Generator Script
         id: run_script
         run: |
@@ -67,16 +74,15 @@ jobs:
           CURRENT_DATE=$(TZ='${{ env.TZ }}' date +'%Y-%m-%d')
           YEAR_MONTH=$(TZ='${{ env.TZ }}' date +'%Y/%m')
           
-          # 注意：请确保 d1_signal.py 脚本已修改为接收命令行参数或自动获取当前日期
-          # 如果脚本中仍是硬编码日期，请手动修改：TRADE_DATE = CURRENT_DATE
-          
+          # 运行脚本，并获取输出
           OUTPUT_TEXT=$(python ${{ env.SCRIPT_NAME }} 2>&1)
           
           # 写入临时结果文件
-          RESULT_FILE="${{ github.sha }}.txt"
+          RESULT_FILE="${{ github.sha }}.log" # 使用 log 后缀更合适
           echo "Run Date: $CURRENT_DATE" >> $RESULT_FILE
           echo "Signals generated at: $TIMESTAMP" >> $RESULT_FILE
-          echo "Full Output:" >> $RESULT_FILE
+          echo "Full Script Output:" >> $RESULT_FILE
+          echo "--------------------" >> $RESULT_FILE
           echo "$OUTPUT_TEXT" >> $RESULT_FILE
 
           # 定义最终目标路径和文件名
