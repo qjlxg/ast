@@ -10,6 +10,9 @@ on:
       - 'd1_signal.py' 
       - '.github/workflows/signal_generator.yml'
   workflow_dispatch: # 允许手动运行
+  schedule:
+    # 每天北京时间 16:00 运行（市场收盘后）
+    - cron: '0 8 * * *'
 
 # 2. 全局配置
 env:
@@ -35,73 +38,87 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # 3. 🔧 安装依赖 (TA-Lib 源码编译安装 - 最终稳定方案)
-      - name: 🛠️ Install TA-Lib from Source and Python packages
+      # 3. 🔧 安装依赖（修复 TA-Lib 安装问题）
+      - name: 🛠️ Install TA-Lib and Python packages
         run: |
-          # 确保安装编译所需的工具
+          # 更新并安装编译工具
           sudo apt-get update
           sudo apt-get install -y build-essential wget
           
-          # 下载 TA-Lib 源码包
-          wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0.tar.gz
-          tar -xzf ta-lib-0.4.0.tar.gz
+          # 从可靠的镜像下载 TA-Lib
+          wget https://downloads.sourceforge.net/project/ta-lib/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz
+          tar -xzf ta-lib-0.4.0-src.tar.gz
           
-          # 编译和安装 C 库
+          # 编译和安装 TA-Lib
           cd ta-lib
           ./configure --prefix=/usr
           make
           sudo make install
           cd ..
-
-          # 安装 Python 包
-          pip install pandas numpy ta-lib
+          
+          # 安装 Python 依赖
+          pip install pandas numpy TA-Lib
 
       # 4. 准备数据环境
       - name: 📂 Check Data Directory
         run: |
           if [ ! -d "${{ env.DATA_DIR }}" ]; then
-            echo "::warning file=${{ env.DATA_DIR }}::Data directory '${{ env.DATA_DIR }}' not found. Creating it, but you need to ensure data files are present for the script to run correctly."
+            echo "::warning::Data directory '${{ env.DATA_DIR }}' not found. Creating it."
             mkdir -p ${{ env.DATA_DIR }}
+          else
+            echo "Data directory found with $(ls -1 ${{ env.DATA_DIR }} | wc -l) files"
           fi
           
-      # 5. 生成信号并格式化文件名
-      # 注意：请确保 d1_signal.py 脚本已修改为自动获取日期或使用硬编码日期
+      # 5. 生成信号
       - name: 🚀 Run Signal Generator Script
         id: run_script
         run: |
           # 设置时区和日期变量
-          TIMESTAMP=$(TZ='${{ env.TZ }}' date +'%Y%m%d_%H%M%S')
-          CURRENT_DATE=$(TZ='${{ env.TZ }}' date +'%Y-%m-%d')
-          YEAR_MONTH=$(TZ='${{ env.TZ }}' date +'%Y/%m')
+          export TZ='${{ env.TZ }}'
+          TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
+          CURRENT_DATE=$(date +'%Y-%m-%d')
+          YEAR_MONTH=$(date +'%Y/%m')
           
-          # 运行脚本，并获取输出
-          OUTPUT_TEXT=$(python ${{ env.SCRIPT_NAME }} 2>&1)
+          echo "Running signal generation script..."
+          echo "Current date: $CURRENT_DATE"
+          echo "Timestamp: $TIMESTAMP"
           
-          # 写入临时结果文件
-          RESULT_FILE="${{ github.sha }}.log" # 使用 log 后缀更合适
-          echo "Run Date: $CURRENT_DATE" >> $RESULT_FILE
-          echo "Signals generated at: $TIMESTAMP" >> $RESULT_FILE
-          echo "Full Script Output:" >> $RESULT_FILE
-          echo "--------------------" >> $RESULT_FILE
-          echo "$OUTPUT_TEXT" >> $RESULT_FILE
-
-          # 定义最终目标路径和文件名
-          TARGET_DIR="${YEAR_MONTH}"
-          TARGET_FILENAME="signals_${TIMESTAMP}.log"
+          # 运行脚本并捕获输出
+          python ${{ env.SCRIPT_NAME }} 2>&1 | tee script_output.log
           
+          # 检查脚本执行状态
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "Script executed successfully"
+          else
+            echo "Script execution failed"
+            exit 1
+          fi
+          
+          # 创建结果文件
+          RESULT_FILE="signals_${TIMESTAMP}.log"
+          echo "Signal Generation Results" > $RESULT_FILE
+          echo "=========================" >> $RESULT_FILE
+          echo "Generated on: $CURRENT_DATE $TIMESTAMP" >> $RESULT_FILE
+          echo "" >> $RESULT_FILE
+          cat script_output.log >> $RESULT_FILE
+          
+          # 设置环境变量供后续步骤使用
           echo "RESULT_FILE=$RESULT_FILE" >> $GITHUB_ENV
-          echo "TARGET_DIR=$TARGET_DIR" >> $GITHUB_ENV
-          echo "TARGET_FILENAME=$TARGET_FILENAME" >> $GITHUB_ENV
+          echo "TARGET_DIR=$YEAR_MONTH" >> $GITHUB_ENV
+          echo "CURRENT_DATE=$CURRENT_DATE" >> $GITHUB_ENV
 
       # 6. 推送结果到仓库
       - name: 📤 Push Results to Repository
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "feat(signals): Add buy signals for ${{ env.TARGET_DIR }} generated at ${{ env.TIMESTAMP }}"
-          file_pattern: ${{ env.RESULT_FILE }}
-          repository: .
-          commit_options: '--allow-empty --no-verify' 
-          script: |
-            mkdir -p ${{ env.TARGET_DIR }}
-            mv ${{ env.RESULT_FILE }} ${{ env.TARGET_DIR }}/${{ env.TARGET_FILENAME }}
-            git add ${{ env.TARGET_DIR }}/${{ env.TARGET_FILENAME }}
+        run: |
+          # 配置 Git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # 创建目标目录并移动结果文件
+          mkdir -p "${{ env.TARGET_DIR }}"
+          mv "${{ env.RESULT_FILE }}" "${{ env.TARGET_DIR }}/"
+          
+          # 提交更改
+          git add "${{ env.TARGET_DIR }}/${{ env.RESULT_FILE }}"
+          git commit -m "feat(signals): Add buy signals for ${{ env.CURRENT_DATE }} [skip ci]" || echo "No changes to commit"
+          git push
