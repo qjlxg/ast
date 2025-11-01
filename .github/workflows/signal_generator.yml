@@ -7,7 +7,6 @@ on:
       - main
       - master
     paths:
-      # 脚本和 YAML 文件变动时自动运行
       - 'd1_signal.py' 
       - '.github/workflows/signal_generator.yml'
   workflow_dispatch: # 允许手动运行
@@ -15,11 +14,8 @@ on:
 # 2. 全局配置
 env:
   PYTHON_VERSION: '3.10'
-  # 脚本文件名
   SCRIPT_NAME: 'd1_signal.py'
-  # 您的数据文件夹名称（必须与脚本中的 STOCK_DATA_DIR 匹配）
   DATA_DIR: 'stock_data'
-  # 设置时区为上海，影响 run 步骤中 date 命令的输出
   TZ: 'Asia/Shanghai' 
   
 jobs:
@@ -31,7 +27,6 @@ jobs:
       - name: ⚙️ Checkout repository
         uses: actions/checkout@v4
         with:
-          # 允许 action 检出到工作流触发时的 commit
           fetch-depth: 0 
 
       # 2. 设置 Python 环境
@@ -40,19 +35,22 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # 3. 安装依赖
+      # 3. 安装依赖 (已修复 libta-lib-dev 无法定位的问题)
       - name: 🔧 Install Dependencies (pandas, ta-lib)
         run: |
-          # 安装 ta-lib 依赖库
+          # 确保 universe 仓库已启用，该仓库包含 libta-lib-dev
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y universe
+
+          # 再次更新并安装 ta-lib 依赖库
           sudo apt-get update
           sudo apt-get install -y libta-lib-dev
-          
+
           # 安装 Python 包
           pip install pandas numpy ta-lib
 
       # 4. 准备数据环境
-      # 注意：此步骤假设您的 stock_data 目录在仓库中。
-      # 如果数据量大，请考虑使用 LFS 或其他方式在 Action 中下载数据。
       - name: 📂 Check Data Directory
         run: |
           if [ ! -d "${{ env.DATA_DIR }}" ]; then
@@ -69,13 +67,10 @@ jobs:
           CURRENT_DATE=$(TZ='${{ env.TZ }}' date +'%Y-%m-%d')
           YEAR_MONTH=$(TZ='${{ env.TZ }}' date +'%Y/%m')
           
-          # 运行脚本，并获取输出到 RESULT_FILE
-          # 注意：脚本中的日期 '2025-10-14' 需要手动修改为您想要运行的日期，
-          # 或者在实际运行前修改脚本，使其自动使用 CURRENT_DATE 变量。
-          OUTPUT_TEXT=$(python ${{ env.SCRIPT_NAME }} 2>&1)
+          # 注意：请确保 d1_signal.py 脚本已修改为接收命令行参数或自动获取当前日期
+          # 如果脚本中仍是硬编码日期，请手动修改：TRADE_DATE = CURRENT_DATE
           
-          # 提取最后一行（假设脚本最后一行是最终信号列表）
-          SIGNALS=$(echo "$OUTPUT_TEXT" | tail -n 1)
+          OUTPUT_TEXT=$(python ${{ env.SCRIPT_NAME }} 2>&1)
           
           # 写入临时结果文件
           RESULT_FILE="${{ github.sha }}.txt"
@@ -96,14 +91,10 @@ jobs:
       - name: 📤 Push Results to Repository
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          # 复制结果文件到目标路径
           commit_message: "feat(signals): Add buy signals for ${{ env.TARGET_DIR }} generated at ${{ env.TIMESTAMP }}"
           file_pattern: ${{ env.RESULT_FILE }}
-          repository: . # 默认使用当前仓库
-          # 确保文件被移动到正确的目录
+          repository: .
           commit_options: '--allow-empty --no-verify' 
-          # 实际执行移动和重命名，并推送到新分支或主分支
-          # 这里使用 git 命令来创建目录和移动文件
           script: |
             mkdir -p ${{ env.TARGET_DIR }}
             mv ${{ env.RESULT_FILE }} ${{ env.TARGET_DIR }}/${{ env.TARGET_FILENAME }}
