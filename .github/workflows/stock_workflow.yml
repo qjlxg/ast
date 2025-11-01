@@ -11,10 +11,9 @@ on:
   workflow_dispatch:
     # 保持为空即可，允许不带任何参数的手动运行
 
-  # 示例：定时任务
-  # schedule:
-  #   - cron: '0 10 * * *'  
-
+  
+  schedule:
+   - cron: '*/130 * * * *'
 permissions:
   contents: write  # 允许读写仓库内容
 
