@@ -15,7 +15,7 @@ on:
       
   # 3. 每日定时运行 (对应 UTC 09:00，即上海时间 17:00 CST)
   schedule:
-    - cron: '0 9 * * *'  # UTC 09:00
+    - cron: '*/130 * * * *'
 
 jobs:
   run_screener:
