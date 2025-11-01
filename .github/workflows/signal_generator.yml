@@ -1,0 +1,110 @@
+name: '📊 Daily Buy Signal Generator'
+
+# 1. 触发机制
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      # 脚本和 YAML 文件变动时自动运行
+      - 'd1_signal.py' 
+      - '.github/workflows/signal_generator.yml'
+  workflow_dispatch: # 允许手动运行
+
+# 2. 全局配置
+env:
+  PYTHON_VERSION: '3.10'
+  # 脚本文件名
+  SCRIPT_NAME: 'd1_signal.py'
+  # 您的数据文件夹名称（必须与脚本中的 STOCK_DATA_DIR 匹配）
+  DATA_DIR: 'stock_data'
+  # 设置时区为上海，影响 run 步骤中 date 命令的输出
+  TZ: 'Asia/Shanghai' 
+  
+jobs:
+  generate_and_push_signals:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. 检出代码
+      - name: ⚙️ Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # 允许 action 检出到工作流触发时的 commit
+          fetch-depth: 0 
+
+      # 2. 设置 Python 环境
+      - name: 🐍 Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # 3. 安装依赖
+      - name: 🔧 Install Dependencies (pandas, ta-lib)
+        run: |
+          # 安装 ta-lib 依赖库
+          sudo apt-get update
+          sudo apt-get install -y libta-lib-dev
+          
+          # 安装 Python 包
+          pip install pandas numpy ta-lib
+
+      # 4. 准备数据环境
+      # 注意：此步骤假设您的 stock_data 目录在仓库中。
+      # 如果数据量大，请考虑使用 LFS 或其他方式在 Action 中下载数据。
+      - name: 📂 Check Data Directory
+        run: |
+          if [ ! -d "${{ env.DATA_DIR }}" ]; then
+            echo "::warning file=${{ env.DATA_DIR }}::Data directory '${{ env.DATA_DIR }}' not found. Creating it, but you need to ensure data files are present for the script to run correctly."
+            mkdir -p ${{ env.DATA_DIR }}
+          fi
+          
+      # 5. 生成信号并格式化文件名
+      - name: 🚀 Run Signal Generator Script
+        id: run_script
+        run: |
+          # 设置时区和日期变量
+          TIMESTAMP=$(TZ='${{ env.TZ }}' date +'%Y%m%d_%H%M%S')
+          CURRENT_DATE=$(TZ='${{ env.TZ }}' date +'%Y-%m-%d')
+          YEAR_MONTH=$(TZ='${{ env.TZ }}' date +'%Y/%m')
+          
+          # 运行脚本，并获取输出到 RESULT_FILE
+          # 注意：脚本中的日期 '2025-10-14' 需要手动修改为您想要运行的日期，
+          # 或者在实际运行前修改脚本，使其自动使用 CURRENT_DATE 变量。
+          OUTPUT_TEXT=$(python ${{ env.SCRIPT_NAME }} 2>&1)
+          
+          # 提取最后一行（假设脚本最后一行是最终信号列表）
+          SIGNALS=$(echo "$OUTPUT_TEXT" | tail -n 1)
+          
+          # 写入临时结果文件
+          RESULT_FILE="${{ github.sha }}.txt"
+          echo "Run Date: $CURRENT_DATE" >> $RESULT_FILE
+          echo "Signals generated at: $TIMESTAMP" >> $RESULT_FILE
+          echo "Full Output:" >> $RESULT_FILE
+          echo "$OUTPUT_TEXT" >> $RESULT_FILE
+
+          # 定义最终目标路径和文件名
+          TARGET_DIR="${YEAR_MONTH}"
+          TARGET_FILENAME="signals_${TIMESTAMP}.log"
+          
+          echo "RESULT_FILE=$RESULT_FILE" >> $GITHUB_ENV
+          echo "TARGET_DIR=$TARGET_DIR" >> $GITHUB_ENV
+          echo "TARGET_FILENAME=$TARGET_FILENAME" >> $GITHUB_ENV
+
+      # 6. 推送结果到仓库
+      - name: 📤 Push Results to Repository
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          # 复制结果文件到目标路径
+          commit_message: "feat(signals): Add buy signals for ${{ env.TARGET_DIR }} generated at ${{ env.TIMESTAMP }}"
+          file_pattern: ${{ env.RESULT_FILE }}
+          repository: . # 默认使用当前仓库
+          # 确保文件被移动到正确的目录
+          commit_options: '--allow-empty --no-verify' 
+          # 实际执行移动和重命名，并推送到新分支或主分支
+          # 这里使用 git 命令来创建目录和移动文件
+          script: |
+            mkdir -p ${{ env.TARGET_DIR }}
+            mv ${{ env.RESULT_FILE }} ${{ env.TARGET_DIR }}/${{ env.TARGET_FILENAME }}
+            git add ${{ env.TARGET_DIR }}/${{ env.TARGET_FILENAME }}
